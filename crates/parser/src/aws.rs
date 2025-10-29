@@ -1,48 +1,101 @@
 //! AWS SDK parser implementation
 //!
 //! Parses AWS SDK structure into ServiceDefinition IR.
+//!
+//! ## Usage Modes
+//!
+//! 1. **Hardcoded mode**: Returns predefined resource definitions (S3 bucket example)
+//! 2. **Rustdoc JSON mode**: Parses rustdoc JSON output for automated discovery
+//!
+//! To generate rustdoc JSON:
+//! ```bash
+//! cargo +nightly rustdoc --package aws-sdk-s3 -- -Z unstable-options --output-format json
+//! ```
 
 use hemmer_provider_generator_common::{
     FieldDefinition, GeneratorError, OperationMapping, Operations, Provider, ResourceDefinition,
     Result, ServiceDefinition,
 };
 
-use crate::{CrudOperation, OperationClassifier};
+use crate::{CrudOperation, OperationClassifier, RustdocLoader};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 /// AWS SDK parser
 pub struct AwsParser {
     service_name: String,
     sdk_version: String,
+    rustdoc_json_path: Option<PathBuf>,
 }
 
 impl AwsParser {
-    /// Create a new AWS parser
+    /// Create a new AWS parser in hardcoded mode
     pub fn new(service_name: &str, sdk_version: &str) -> Self {
         Self {
             service_name: service_name.to_string(),
             sdk_version: sdk_version.to_string(),
+            rustdoc_json_path: None,
+        }
+    }
+
+    /// Create a new AWS parser with rustdoc JSON path for automated parsing
+    pub fn with_rustdoc_json(
+        service_name: &str,
+        sdk_version: &str,
+        rustdoc_json_path: PathBuf,
+    ) -> Self {
+        Self {
+            service_name: service_name.to_string(),
+            sdk_version: sdk_version.to_string(),
+            rustdoc_json_path: Some(rustdoc_json_path),
         }
     }
 
     /// Parse the AWS service into ServiceDefinition
     ///
-    /// For Phase 2 MVP, this demonstrates the parsing logic
-    /// with hardcoded S3 bucket example.
+    /// # Modes
+    /// - If rustdoc_json_path is provided: Parse from rustdoc JSON (automated)
+    /// - Otherwise: Use hardcoded resource definitions (S3 bucket example)
     pub fn parse(&self) -> Result<ServiceDefinition> {
-        // For now, return a hardcoded S3 bucket example
-        // In a full implementation, this would:
-        // 1. Load AWS SDK crate metadata (from docs.rs JSON or rustdoc)
-        // 2. Parse operation modules
-        // 3. Extract types and fields
-        // 4. Group operations by resource
-        // 5. Build ServiceDefinition
+        if let Some(json_path) = &self.rustdoc_json_path {
+            self.parse_from_rustdoc(json_path)
+        } else {
+            self.parse_hardcoded()
+        }
+    }
 
+    /// Parse from rustdoc JSON (automated mode)
+    fn parse_from_rustdoc(&self, json_path: &Path) -> Result<ServiceDefinition> {
+        // Load rustdoc JSON
+        let crate_data = RustdocLoader::load_from_file(json_path)?;
+
+        // Extract operations
+        let operations = RustdocLoader::find_operation_modules(&crate_data);
+
+        // Group operations by resource
+        let grouped = self.group_operations_by_resource(operations);
+
+        // Build resources from grouped operations
+        let resources = grouped
+            .into_iter()
+            .map(|(resource_name, ops)| self.build_resource_from_operations(&resource_name, ops))
+            .collect();
+
+        Ok(ServiceDefinition {
+            provider: Provider::Aws,
+            name: self.service_name.clone(),
+            sdk_version: self.sdk_version.clone(),
+            resources,
+        })
+    }
+
+    /// Parse using hardcoded resource definitions
+    fn parse_hardcoded(&self) -> Result<ServiceDefinition> {
         if self.service_name == "s3" {
             Ok(self.parse_s3_service())
         } else {
             Err(GeneratorError::Parse(format!(
-                "Service '{}' not yet supported. Currently only 's3' is implemented.",
+                "Service '{}' not yet supported in hardcoded mode. Use with_rustdoc_json() for automated parsing.",
                 self.service_name
             )))
         }
@@ -133,9 +186,7 @@ impl AwsParser {
 
     /// Group operations by resource name
     ///
-    /// This would be used in a full implementation to automatically
-    /// discover resources from operation names.
-    #[allow(dead_code)]
+    /// Automatically discovers resources from operation names.
     fn group_operations_by_resource(
         &self,
         operations: Vec<String>,
@@ -145,14 +196,71 @@ impl AwsParser {
         for op in operations {
             if let Some(crud) = OperationClassifier::classify(&op) {
                 let resource = OperationClassifier::extract_resource(&op);
-                grouped
-                    .entry(resource.to_string())
-                    .or_default()
-                    .push((op, crud));
+                grouped.entry(resource).or_default().push((op, crud));
             }
         }
 
         grouped
+    }
+
+    /// Build a resource definition from discovered operations
+    ///
+    /// Creates a minimal resource definition based on the operations found.
+    /// In a full implementation, this would also extract field definitions
+    /// from the Input/Output types in the rustdoc JSON.
+    fn build_resource_from_operations(
+        &self,
+        resource_name: &str,
+        operations: Vec<(String, CrudOperation)>,
+    ) -> ResourceDefinition {
+        let mut ops = Operations {
+            create: None,
+            read: None,
+            update: None,
+            delete: None,
+        };
+
+        // Map operations to CRUD
+        for (op_name, crud_type) in operations {
+            let mapping = OperationMapping {
+                sdk_operation: op_name.clone(),
+                additional_operations: vec![],
+            };
+
+            match crud_type {
+                CrudOperation::Create => {
+                    if ops.create.is_none() {
+                        ops.create = Some(mapping);
+                    }
+                }
+                CrudOperation::Read => {
+                    if ops.read.is_none() {
+                        ops.read = Some(mapping);
+                    }
+                }
+                CrudOperation::Update => {
+                    if ops.update.is_none() {
+                        ops.update = Some(mapping);
+                    }
+                }
+                CrudOperation::Delete => {
+                    if ops.delete.is_none() {
+                        ops.delete = Some(mapping);
+                    }
+                }
+            }
+        }
+
+        ResourceDefinition {
+            name: resource_name.to_string(),
+            description: Some(format!(
+                "{} resource (auto-discovered from SDK)",
+                resource_name
+            )),
+            fields: vec![],  // TODO: Extract from Input types in rustdoc JSON
+            outputs: vec![], // TODO: Extract from Output types in rustdoc JSON
+            operations: ops,
+        }
     }
 }
 

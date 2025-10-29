@@ -17,10 +17,12 @@
 
 mod aws;
 mod operation_mapper;
+mod rustdoc_loader;
 mod type_mapper;
 
 pub use aws::AwsParser;
 pub use operation_mapper::{CrudOperation, OperationClassifier};
+pub use rustdoc_loader::RustdocLoader;
 pub use type_mapper::TypeMapper;
 
 use hemmer_provider_generator_common::{Result, ServiceDefinition};
