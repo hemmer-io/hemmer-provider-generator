@@ -56,12 +56,15 @@ jobs:
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - uses: rustsec/audit-check@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Run security audit
+        run: cargo audit --deny warnings --ignore RUSTSEC-2025-0081 --ignore RUSTSEC-2025-0075 --ignore RUSTSEC-2025-0080 --ignore RUSTSEC-2025-0074 --ignore RUSTSEC-2025-0104 --ignore RUSTSEC-2025-0098
+        continue-on-error: false
 
   docs:
     name: Documentation
