@@ -188,8 +188,7 @@ mod tests {
             "List<String>"
         );
         assert_eq!(
-            FieldType::Map(Box::new(FieldType::String), Box::new(FieldType::Integer))
-                .to_kcl_type(),
+            FieldType::Map(Box::new(FieldType::String), Box::new(FieldType::Integer)).to_kcl_type(),
             "Map<String,Integer>"
         );
     }
