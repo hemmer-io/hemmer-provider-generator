@@ -169,6 +169,170 @@ impl FieldType {
     }
 }
 
+/// Metadata about an SDK
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SdkMetadata {
+    /// Cloud provider
+    pub provider: Provider,
+    /// SDK version
+    pub sdk_version: String,
+    /// SDK name (e.g., "aws-sdk-rust", "google-cloud-rust")
+    pub sdk_name: String,
+}
+
+/// Trait for parsing SDK crates into ServiceDefinition IR
+///
+/// This trait enables a plugin-like architecture where:
+/// - Built-in parsers are provided for AWS, GCP, Azure
+/// - Custom parsers can be implemented for any SDK
+///
+/// # Example
+///
+/// ```rust
+/// use hemmer_provider_generator_common::{SdkParser, ServiceDefinition, SdkMetadata, Provider, Result};
+///
+/// struct MyCustomParser {
+///     service_name: String,
+///     sdk_version: String,
+/// }
+///
+/// impl SdkParser for MyCustomParser {
+///     fn parse(&self) -> Result<ServiceDefinition> {
+///         // Parse your SDK and return ServiceDefinition
+///         todo!("Implement custom parsing logic")
+///     }
+///
+///     fn supported_services(&self) -> Vec<String> {
+///         vec!["my-service".to_string()]
+///     }
+///
+///     fn metadata(&self) -> SdkMetadata {
+///         SdkMetadata {
+///             provider: Provider::Aws, // or your custom provider
+///             sdk_version: self.sdk_version.clone(),
+///             sdk_name: "my-custom-sdk".to_string(),
+///         }
+///     }
+/// }
+/// ```
+pub trait SdkParser: Send + Sync {
+    /// Parse the SDK and return service definition
+    ///
+    /// This method should:
+    /// 1. Load SDK metadata (rustdoc JSON, OpenAPI spec, etc.)
+    /// 2. Extract operations and types
+    /// 3. Build ResourceDefinition instances
+    /// 4. Return complete ServiceDefinition
+    fn parse(&self) -> Result<ServiceDefinition>;
+
+    /// List all services exposed by this SDK
+    ///
+    /// For AWS: ["s3", "ec2", "dynamodb", ...]
+    /// For GCP: ["storage", "compute", ...]
+    fn supported_services(&self) -> Vec<String>;
+
+    /// Get metadata about the SDK
+    ///
+    /// Returns information about the SDK provider, version, and name
+    fn metadata(&self) -> SdkMetadata;
+}
+
+/// Registry for managing SDK parsers
+///
+/// This registry allows:
+/// - Registering built-in parsers (AWS, GCP, Azure)
+/// - Registering custom user-provided parsers
+/// - Retrieving parsers by provider name
+///
+/// # Example
+///
+/// ```rust
+/// use hemmer_provider_generator_common::{ParserRegistry, Provider};
+/// # use hemmer_provider_generator_common::{SdkParser, ServiceDefinition, SdkMetadata, Result};
+/// #
+/// # struct MyParser;
+/// # impl SdkParser for MyParser {
+/// #     fn parse(&self) -> Result<ServiceDefinition> { todo!() }
+/// #     fn supported_services(&self) -> Vec<String> { vec![] }
+/// #     fn metadata(&self) -> SdkMetadata {
+/// #         SdkMetadata {
+/// #             provider: Provider::Aws,
+/// #             sdk_version: "1.0.0".to_string(),
+/// #             sdk_name: "test".to_string(),
+/// #         }
+/// #     }
+/// # }
+///
+/// let mut registry = ParserRegistry::new();
+/// registry.register("aws", Box::new(MyParser));
+///
+/// let parser = registry.get("aws");
+/// assert!(parser.is_some());
+/// ```
+pub struct ParserRegistry {
+    parsers: HashMap<String, Box<dyn SdkParser>>,
+}
+
+impl ParserRegistry {
+    /// Create a new empty parser registry
+    pub fn new() -> Self {
+        Self {
+            parsers: HashMap::new(),
+        }
+    }
+
+    /// Register a parser with a given name
+    ///
+    /// # Arguments
+    /// * `name` - Provider name (e.g., "aws", "gcp", "azure")
+    /// * `parser` - Boxed parser implementing SdkParser trait
+    ///
+    /// # Example
+    /// ```rust
+    /// # use hemmer_provider_generator_common::{ParserRegistry, SdkParser, ServiceDefinition, SdkMetadata, Provider, Result};
+    /// # struct MyParser;
+    /// # impl SdkParser for MyParser {
+    /// #     fn parse(&self) -> Result<ServiceDefinition> { todo!() }
+    /// #     fn supported_services(&self) -> Vec<String> { vec![] }
+    /// #     fn metadata(&self) -> SdkMetadata {
+    /// #         SdkMetadata {
+    /// #             provider: Provider::Aws,
+    /// #             sdk_version: "1.0.0".to_string(),
+    /// #             sdk_name: "test".to_string(),
+    /// #         }
+    /// #     }
+    /// # }
+    /// let mut registry = ParserRegistry::new();
+    /// registry.register("my-provider", Box::new(MyParser));
+    /// ```
+    pub fn register(&mut self, name: &str, parser: Box<dyn SdkParser>) {
+        self.parsers.insert(name.to_string(), parser);
+    }
+
+    /// Get a parser by provider name
+    ///
+    /// Returns `None` if no parser is registered with the given name.
+    pub fn get(&self, name: &str) -> Option<&dyn SdkParser> {
+        self.parsers.get(name).map(|p| p.as_ref())
+    }
+
+    /// List all registered provider names
+    pub fn list_providers(&self) -> Vec<String> {
+        self.parsers.keys().cloned().collect()
+    }
+
+    /// Check if a provider is registered
+    pub fn has_provider(&self, name: &str) -> bool {
+        self.parsers.contains_key(name)
+    }
+}
+
+impl Default for ParserRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,5 +383,103 @@ mod tests {
 
         assert_eq!(service.provider, Provider::Aws);
         assert_eq!(service.name, "s3");
+    }
+
+    // Mock parser for testing
+    struct MockParser {
+        service_name: String,
+        sdk_version: String,
+    }
+
+    impl SdkParser for MockParser {
+        fn parse(&self) -> Result<ServiceDefinition> {
+            Ok(ServiceDefinition {
+                provider: Provider::Aws,
+                name: self.service_name.clone(),
+                sdk_version: self.sdk_version.clone(),
+                resources: vec![],
+            })
+        }
+
+        fn supported_services(&self) -> Vec<String> {
+            vec![self.service_name.clone()]
+        }
+
+        fn metadata(&self) -> SdkMetadata {
+            SdkMetadata {
+                provider: Provider::Aws,
+                sdk_version: self.sdk_version.clone(),
+                sdk_name: "mock-sdk".to_string(),
+            }
+        }
+    }
+
+    #[test]
+    fn test_parser_registry_new() {
+        let registry = ParserRegistry::new();
+        assert_eq!(registry.list_providers().len(), 0);
+    }
+
+    #[test]
+    fn test_parser_registry_register() {
+        let mut registry = ParserRegistry::new();
+        let parser = MockParser {
+            service_name: "s3".to_string(),
+            sdk_version: "1.0.0".to_string(),
+        };
+
+        registry.register("aws", Box::new(parser));
+        assert!(registry.has_provider("aws"));
+        assert!(!registry.has_provider("gcp"));
+    }
+
+    #[test]
+    fn test_parser_registry_get() {
+        let mut registry = ParserRegistry::new();
+        let parser = MockParser {
+            service_name: "s3".to_string(),
+            sdk_version: "1.0.0".to_string(),
+        };
+
+        registry.register("aws", Box::new(parser));
+
+        let retrieved = registry.get("aws");
+        assert!(retrieved.is_some());
+
+        let metadata = retrieved.unwrap().metadata();
+        assert_eq!(metadata.provider, Provider::Aws);
+        assert_eq!(metadata.sdk_name, "mock-sdk");
+    }
+
+    #[test]
+    fn test_parser_registry_list_providers() {
+        let mut registry = ParserRegistry::new();
+
+        registry.register(
+            "aws",
+            Box::new(MockParser {
+                service_name: "s3".to_string(),
+                sdk_version: "1.0.0".to_string(),
+            }),
+        );
+
+        registry.register(
+            "gcp",
+            Box::new(MockParser {
+                service_name: "storage".to_string(),
+                sdk_version: "2.0.0".to_string(),
+            }),
+        );
+
+        let providers = registry.list_providers();
+        assert_eq!(providers.len(), 2);
+        assert!(providers.contains(&"aws".to_string()));
+        assert!(providers.contains(&"gcp".to_string()));
+    }
+
+    #[test]
+    fn test_parser_registry_default() {
+        let registry = ParserRegistry::default();
+        assert_eq!(registry.list_providers().len(), 0);
     }
 }
