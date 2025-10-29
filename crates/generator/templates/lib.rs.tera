@@ -52,7 +52,7 @@ impl {{ service_name | capitalize }}Provider {
 
 {% for resource in resources %}
     /// Get {{ resource.name }} resource handler
-    pub fn {{ resource.name }}(&self) -> resources::{{ resource.name | capitalize }} {
+    pub fn {{ resource.name }}(&self) -> resources::{{ resource.name | capitalize }}<'_> {
         resources::{{ resource.name | capitalize }}::new(self)
     }
 {% endfor %}
