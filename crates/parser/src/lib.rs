@@ -5,6 +5,14 @@
 //!
 //! ## Parsing Strategy
 //!
+//! ### Spec-Based Parsing (Recommended)
+//! - **AWS**: Parse Smithy JSON AST from github.com/aws/api-models-aws
+//! - **Kubernetes**: Parse OpenAPI 3.0 specs from API server
+//! - **GCP**: Parse Discovery Documents from googleapis.com or gRPC FileDescriptorSet
+//! - **Azure**: Parse OpenAPI specs from github.com/Azure/azure-rest-api-specs
+//! - **gRPC**: Parse Protocol Buffer FileDescriptorSet from .proto files or gRPC reflection
+//!
+//! ### Legacy Parsing
 //! For AWS SDK for Rust, we parse the published crate structure:
 //! - `operation::*` modules contain Input/Output types for each operation
 //! - `types::*` module contains data types used by operations
@@ -20,9 +28,19 @@ mod operation_mapper;
 mod rustdoc_loader;
 mod type_mapper;
 
+// Spec format parsers
+pub mod discovery;
+pub mod openapi;
+pub mod protobuf;
+pub mod smithy;
+
 pub use aws::AwsParser;
+pub use discovery::DiscoveryParser;
+pub use openapi::OpenApiParser;
 pub use operation_mapper::{CrudOperation, OperationClassifier};
+pub use protobuf::ProtobufParser;
 pub use rustdoc_loader::RustdocLoader;
+pub use smithy::SmithyParser;
 pub use type_mapper::TypeMapper;
 
 use hemmer_provider_generator_common::{Result, ServiceDefinition};

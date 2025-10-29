@@ -2,51 +2,399 @@
 //!
 //! Command-line interface for generating Hemmer providers from cloud SDKs.
 
-use clap::{Parser, Subcommand};
+use anyhow::{Context, Result};
+use clap::{Parser, Subcommand, ValueEnum};
 use colored::*;
+use hemmer_provider_generator_generator::ProviderGenerator;
+use hemmer_provider_generator_parser::{
+    DiscoveryParser, OpenApiParser, ProtobufParser, SmithyParser,
+};
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(name = "hemmer-provider-generator")]
 #[command(version, about = "Generate Hemmer providers from cloud provider SDKs", long_about = None)]
 struct Cli {
     #[command(subcommand)]
-    command: Option<Commands>,
+    command: Commands,
+
+    /// Enable verbose output
+    #[arg(short, long, global = true)]
+    verbose: bool,
 }
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Generate a provider
+    /// Parse a spec file and display the extracted service definition
+    #[command(after_help = "EXAMPLES:\n  \
+        # Parse AWS Smithy spec\n  \
+        hemmer-provider-generator parse --spec s3.json --format smithy\n\n  \
+        # Parse GCP Discovery document\n  \
+        hemmer-provider-generator parse --spec storage-v1.json --format discovery\n\n  \
+        # Auto-detect format\n  \
+        hemmer-provider-generator parse --spec kubernetes-api.json")]
+    Parse {
+        /// Path to the spec file
+        #[arg(short, long)]
+        spec: PathBuf,
+
+        /// Spec format (auto-detected if not specified)
+        #[arg(short, long)]
+        format: Option<SpecFormat>,
+
+        /// Service name
+        #[arg(long)]
+        service: Option<String>,
+
+        /// API version
+        #[arg(long, default_value = "v1")]
+        version: String,
+    },
+
+    /// Generate a provider from a spec file
+    #[command(after_help = "EXAMPLES:\n  \
+        # Generate from AWS Smithy spec\n  \
+        hemmer-provider-generator generate \\\n    \
+        --spec s3.json \\\n    \
+        --format smithy \\\n    \
+        --service s3 \\\n    \
+        --output ./providers/aws-s3\n\n  \
+        # Generate from GCP Discovery document\n  \
+        hemmer-provider-generator generate \\\n    \
+        --spec storage-v1.json \\\n    \
+        --format discovery \\\n    \
+        --service storage \\\n    \
+        --output ./providers/gcp-storage\n\n  \
+        # Generate from Protobuf FileDescriptorSet\n  \
+        hemmer-provider-generator generate \\\n    \
+        --spec service.pb \\\n    \
+        --format protobuf \\\n    \
+        --service storage \\\n    \
+        --output ./providers/grpc-storage")]
     Generate {
-        /// Provider type (aws, gcp, azure)
-        provider: String,
+        /// Path to the spec file
+        #[arg(short, long)]
+        spec: PathBuf,
+
+        /// Spec format (auto-detected if not specified)
+        #[arg(short, long)]
+        format: Option<SpecFormat>,
+
+        /// Service name (required for some formats)
+        #[arg(long)]
+        service: String,
+
+        /// API version
+        #[arg(long, default_value = "v1")]
+        version: String,
 
         /// Output directory
         #[arg(short, long, default_value = "./output")]
-        output: String,
+        output: PathBuf,
     },
 }
 
-fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum SpecFormat {
+    /// AWS Smithy JSON AST
+    Smithy,
+    /// OpenAPI 3.0 (Kubernetes, Azure)
+    Openapi,
+    /// Google Discovery Document
+    Discovery,
+    /// Protocol Buffer FileDescriptorSet
+    Protobuf,
+}
 
-    match cli.command {
-        Some(Commands::Generate { provider, output }) => {
-            println!(
-                "{} Generating {} provider to {}",
-                "→".cyan(),
-                provider.green(),
-                output.yellow()
-            );
-            println!(
-                "{} Provider generation not yet implemented (Phase 2-4)",
-                "!".red()
-            );
-            Ok(())
-        }
-        None => {
-            println!("{}", "Hemmer Provider Generator".bold().cyan());
-            println!("\nRun with --help for usage information");
-            Ok(())
+impl std::fmt::Display for SpecFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SpecFormat::Smithy => write!(f, "Smithy"),
+            SpecFormat::Openapi => write!(f, "OpenAPI"),
+            SpecFormat::Discovery => write!(f, "Discovery"),
+            SpecFormat::Protobuf => write!(f, "Protobuf"),
         }
     }
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+
+    if cli.verbose {
+        println!("{} Verbose mode enabled", "→".cyan());
+    }
+
+    match cli.command {
+        Commands::Parse {
+            spec,
+            format,
+            service,
+            version,
+        } => {
+            parse_command(
+                spec.as_path(),
+                format,
+                service.as_deref(),
+                &version,
+                cli.verbose,
+            )?;
+        }
+        Commands::Generate {
+            spec,
+            format,
+            service,
+            version,
+            output,
+        } => {
+            generate_command(
+                spec.as_path(),
+                format,
+                &service,
+                &version,
+                output.as_path(),
+                cli.verbose,
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn parse_command(
+    spec_path: &Path,
+    format: Option<SpecFormat>,
+    service_name: Option<&str>,
+    version: &str,
+    verbose: bool,
+) -> Result<()> {
+    println!("{} Parsing spec file: {}", "→".cyan(), spec_path.display());
+
+    // Detect format if not specified
+    let detected_format = format.unwrap_or_else(|| {
+        let detected = detect_format(spec_path);
+        println!(
+            "{} Auto-detected format: {}",
+            "→".cyan(),
+            detected.to_string().yellow()
+        );
+        detected
+    });
+
+    // Infer service name from filename if not provided
+    let service = service_name
+        .map(String::from)
+        .or_else(|| infer_service_name(spec_path))
+        .unwrap_or_else(|| "unknown".to_string());
+
+    if verbose {
+        println!("  Format: {}", detected_format);
+        println!("  Service: {}", service);
+        println!("  Version: {}", version);
+    }
+
+    // Parse based on format
+    let service_def = match detected_format {
+        SpecFormat::Smithy => {
+            println!("{} Using Smithy parser", "→".cyan());
+            let parser = SmithyParser::from_file(spec_path, &service, version)
+                .context("Failed to load Smithy spec")?;
+            parser.parse().context("Failed to parse Smithy spec")?
+        }
+        SpecFormat::Openapi => {
+            println!("{} Using OpenAPI parser", "→".cyan());
+            let parser = OpenApiParser::from_file(spec_path, &service, version)
+                .context("Failed to load OpenAPI spec")?;
+            parser.parse().context("Failed to parse OpenAPI spec")?
+        }
+        SpecFormat::Discovery => {
+            println!("{} Using Discovery parser", "→".cyan());
+            let parser = DiscoveryParser::from_file(spec_path, &service, version)
+                .context("Failed to load Discovery doc")?;
+            parser.parse().context("Failed to parse Discovery doc")?
+        }
+        SpecFormat::Protobuf => {
+            println!("{} Using Protobuf parser", "→".cyan());
+            let parser = ProtobufParser::from_file(spec_path, &service, version)
+                .context("Failed to load Protobuf FileDescriptorSet")?;
+            parser
+                .parse()
+                .context("Failed to parse Protobuf FileDescriptorSet")?
+        }
+    };
+
+    // Display results
+    println!("\n{}", "✓ Parse successful!".green().bold());
+    println!("\n{}", "Service Definition:".bold());
+    println!("  Name: {}", service_def.name.yellow());
+    println!("  Version: {}", service_def.sdk_version.yellow());
+    println!("  Provider: {:?}", service_def.provider);
+    println!("  Resources: {}", service_def.resources.len());
+
+    if verbose {
+        println!("\n{}", "Resources:".bold());
+        for resource in &service_def.resources {
+            println!("  • {} ({})", resource.name.cyan(), {
+                let mut ops = Vec::new();
+                if resource.operations.create.is_some() {
+                    ops.push("C");
+                }
+                if resource.operations.read.is_some() {
+                    ops.push("R");
+                }
+                if resource.operations.update.is_some() {
+                    ops.push("U");
+                }
+                if resource.operations.delete.is_some() {
+                    ops.push("D");
+                }
+                ops.join("")
+            });
+            println!("    Fields: {}", resource.fields.len());
+            println!("    Outputs: {}", resource.outputs.len());
+        }
+    }
+
+    Ok(())
+}
+
+fn generate_command(
+    spec_path: &Path,
+    format: Option<SpecFormat>,
+    service_name: &str,
+    version: &str,
+    output: &Path,
+    verbose: bool,
+) -> Result<()> {
+    println!(
+        "{} Generating provider from: {}",
+        "→".cyan(),
+        spec_path.display()
+    );
+
+    // Detect format if not specified
+    let detected_format = format.unwrap_or_else(|| {
+        let detected = detect_format(spec_path);
+        println!(
+            "{} Auto-detected format: {}",
+            "→".cyan(),
+            detected.to_string().yellow()
+        );
+        detected
+    });
+
+    if verbose {
+        println!("  Format: {}", detected_format);
+        println!("  Service: {}", service_name);
+        println!("  Version: {}", version);
+        println!("  Output: {}", output.display());
+    }
+
+    // Parse based on format
+    println!("{} Parsing spec...", "→".cyan());
+    let service_def = match detected_format {
+        SpecFormat::Smithy => {
+            let parser = SmithyParser::from_file(spec_path, service_name, version)
+                .context("Failed to load Smithy spec")?;
+            parser.parse().context("Failed to parse Smithy spec")?
+        }
+        SpecFormat::Openapi => {
+            let parser = OpenApiParser::from_file(spec_path, service_name, version)
+                .context("Failed to load OpenAPI spec")?;
+            parser.parse().context("Failed to parse OpenAPI spec")?
+        }
+        SpecFormat::Discovery => {
+            let parser = DiscoveryParser::from_file(spec_path, service_name, version)
+                .context("Failed to load Discovery doc")?;
+            parser.parse().context("Failed to parse Discovery doc")?
+        }
+        SpecFormat::Protobuf => {
+            let parser = ProtobufParser::from_file(spec_path, service_name, version)
+                .context("Failed to load Protobuf FileDescriptorSet")?;
+            parser
+                .parse()
+                .context("Failed to parse Protobuf FileDescriptorSet")?
+        }
+    };
+
+    println!(
+        "{} Parsed {} resources",
+        "✓".green(),
+        service_def.resources.len()
+    );
+
+    // Generate provider
+    println!("{} Generating provider files...", "→".cyan());
+    let generator = ProviderGenerator::new(service_def).context("Failed to create generator")?;
+    generator
+        .generate_to_directory(output)
+        .context("Failed to generate provider")?;
+
+    println!("\n{}", "✓ Generation complete!".green().bold());
+    println!("\n{}", "Generated files:".bold());
+    println!("  📄 {}/provider.k", output.display());
+    println!("  📄 {}/src/lib.rs", output.display());
+    println!("  📄 {}/Cargo.toml", output.display());
+    println!("\n{}", "Next steps:".bold());
+    println!("  1. Review generated files in {}", output.display());
+    println!(
+        "  2. Build provider: cd {} && cargo build",
+        output.display()
+    );
+    println!("  3. Install in hemmer provider directory");
+
+    Ok(())
+}
+
+/// Detect spec format from file extension and content
+fn detect_format(path: &Path) -> SpecFormat {
+    // Try extension first
+    if let Some(ext) = path.extension() {
+        if let Some("pb") = ext.to_str() {
+            return SpecFormat::Protobuf;
+        }
+    }
+
+    // Try filename patterns
+    if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
+        if filename.contains("smithy") || filename.contains("model") {
+            return SpecFormat::Smithy;
+        }
+        if filename.contains("openapi") || filename.contains("swagger") {
+            return SpecFormat::Openapi;
+        }
+        if filename.contains("discovery") {
+            return SpecFormat::Discovery;
+        }
+    }
+
+    // Try reading file content
+    if let Ok(content) = std::fs::read_to_string(path) {
+        // Check for format-specific markers
+        if content.contains("\"smithy\"") && content.contains("\"shapes\"") {
+            return SpecFormat::Smithy;
+        }
+        if content.contains("\"openapi\"") && content.contains("\"paths\"") {
+            return SpecFormat::Openapi;
+        }
+        if content.contains("\"discoveryVersion\"") && content.contains("\"resources\"") {
+            return SpecFormat::Discovery;
+        }
+    }
+
+    // Default to Smithy (most common for AWS)
+    SpecFormat::Smithy
+}
+
+/// Infer service name from filename
+fn infer_service_name(path: &Path) -> Option<String> {
+    path.file_stem().and_then(|s| s.to_str()).map(|s| {
+        // Remove version suffixes like "-v1"
+        s.split('-')
+            .next()
+            .unwrap_or(s)
+            .split('.')
+            .next()
+            .unwrap_or(s)
+            .to_string()
+    })
 }

@@ -39,6 +39,7 @@ pub enum Provider {
     Aws,
     Gcp,
     Azure,
+    Kubernetes,
 }
 
 /// Intermediate representation of a cloud service (e.g., aws-sdk-s3)
