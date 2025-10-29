@@ -2,8 +2,8 @@
 //!
 //! Loads and parses rustdoc JSON output from AWS SDK crates.
 
-use hemmer_provider_generator_common::{GeneratorError, Result};
-use rustdoc_types::Crate;
+use hemmer_provider_generator_common::{FieldDefinition, GeneratorError, Result};
+use rustdoc_types::{Crate, Id, ItemEnum, Type};
 use std::path::Path;
 
 /// Loads rustdoc JSON from a file path
@@ -90,6 +90,157 @@ impl RustdocLoader {
         }
 
         types
+    }
+
+    /// Extract fields from a struct by name
+    ///
+    /// Searches for a struct with the given name and extracts its field definitions.
+    /// Returns empty vector if struct not found or has no fields.
+    pub fn extract_struct_fields(crate_data: &Crate, struct_name: &str) -> Vec<FieldDefinition> {
+        // Find the struct item
+        let struct_item = crate_data
+            .index
+            .values()
+            .find(|item| item.name.as_deref() == Some(struct_name));
+
+        let struct_item = match struct_item {
+            Some(item) => item,
+            None => return vec![],
+        };
+
+        // Extract fields from the struct
+        if let ItemEnum::Struct(struct_data) = &struct_item.inner {
+            match &struct_data.kind {
+                rustdoc_types::StructKind::Plain { fields, .. } => {
+                    return fields
+                        .iter()
+                        .filter_map(|field_id| Self::extract_field_definition(crate_data, field_id))
+                        .collect();
+                }
+                _ => return vec![],
+            }
+        }
+
+        vec![]
+    }
+
+    /// Extract a single field definition from a field ID
+    fn extract_field_definition(crate_data: &Crate, field_id: &Id) -> Option<FieldDefinition> {
+        let field_item = crate_data.index.get(field_id)?;
+        let field_name = field_item.name.as_ref()?.clone();
+
+        // Extract field type
+        if let ItemEnum::StructField(field_type) = &field_item.inner {
+            let (field_type_mapped, required) =
+                Self::map_rustdoc_type_to_field_type(crate_data, field_type);
+
+            Some(FieldDefinition {
+                name: field_name.clone(),
+                field_type: field_type_mapped,
+                required,
+                sensitive: crate::TypeMapper::is_sensitive(&field_name),
+                immutable: crate::TypeMapper::is_immutable(&field_name),
+                description: field_item.docs.clone(),
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Map rustdoc Type to our FieldType
+    ///
+    /// Returns (FieldType, required: bool)
+    #[allow(clippy::only_used_in_recursion)]
+    fn map_rustdoc_type_to_field_type(
+        crate_data: &Crate,
+        rustdoc_type: &Type,
+    ) -> (hemmer_provider_generator_common::FieldType, bool) {
+        use hemmer_provider_generator_common::FieldType;
+
+        match rustdoc_type {
+            Type::ResolvedPath(path) => {
+                // Extract the last segment of the path as the type name
+                let type_name = path.path.rsplit("::").next().unwrap_or(&path.path);
+
+                // Check if it's Option<T>
+                if type_name == "Option" {
+                    if let Some(generic_args) = &path.args {
+                        if let rustdoc_types::GenericArgs::AngleBracketed { args, .. } =
+                            generic_args.as_ref()
+                        {
+                            if let Some(rustdoc_types::GenericArg::Type(inner_type)) = args.first()
+                            {
+                                let (inner_field_type, _) =
+                                    Self::map_rustdoc_type_to_field_type(crate_data, inner_type);
+                                return (inner_field_type, false); // Option means not required
+                            }
+                        }
+                    }
+                    return (FieldType::String, false);
+                }
+
+                // Check if it's Vec<T>
+                if type_name == "Vec" {
+                    if let Some(generic_args) = &path.args {
+                        if let rustdoc_types::GenericArgs::AngleBracketed { args, .. } =
+                            generic_args.as_ref()
+                        {
+                            if let Some(rustdoc_types::GenericArg::Type(inner_type)) = args.first()
+                            {
+                                let (inner_field_type, _) =
+                                    Self::map_rustdoc_type_to_field_type(crate_data, inner_type);
+                                return (FieldType::List(Box::new(inner_field_type)), true);
+                            }
+                        }
+                    }
+                    return (FieldType::List(Box::new(FieldType::String)), true);
+                }
+
+                // Check if it's HashMap<K, V>
+                if type_name == "HashMap" {
+                    if let Some(generic_args) = &path.args {
+                        if let rustdoc_types::GenericArgs::AngleBracketed { args, .. } =
+                            generic_args.as_ref()
+                        {
+                            if args.len() >= 2 {
+                                let key_type = if let Some(rustdoc_types::GenericArg::Type(k)) =
+                                    args.first()
+                                {
+                                    let (kt, _) =
+                                        Self::map_rustdoc_type_to_field_type(crate_data, k);
+                                    kt
+                                } else {
+                                    FieldType::String
+                                };
+
+                                let value_type =
+                                    if let Some(rustdoc_types::GenericArg::Type(v)) = args.get(1) {
+                                        let (vt, _) =
+                                            Self::map_rustdoc_type_to_field_type(crate_data, v);
+                                        vt
+                                    } else {
+                                        FieldType::String
+                                    };
+
+                                return (
+                                    FieldType::Map(Box::new(key_type), Box::new(value_type)),
+                                    true,
+                                );
+                            }
+                        }
+                    }
+                    return (
+                        FieldType::Map(Box::new(FieldType::String), Box::new(FieldType::String)),
+                        true,
+                    );
+                }
+
+                // Map basic types
+                (crate::TypeMapper::map_type(type_name), true)
+            }
+            Type::Primitive(prim) => (crate::TypeMapper::map_type(prim), true),
+            _ => (FieldType::String, true), // Default fallback
+        }
     }
 }
 

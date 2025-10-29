@@ -78,7 +78,9 @@ impl AwsParser {
         // Build resources from grouped operations
         let resources = grouped
             .into_iter()
-            .map(|(resource_name, ops)| self.build_resource_from_operations(&resource_name, ops))
+            .map(|(resource_name, ops)| {
+                self.build_resource_from_operations(&crate_data, &resource_name, ops)
+            })
             .collect();
 
         Ok(ServiceDefinition {
@@ -205,11 +207,10 @@ impl AwsParser {
 
     /// Build a resource definition from discovered operations
     ///
-    /// Creates a minimal resource definition based on the operations found.
-    /// In a full implementation, this would also extract field definitions
-    /// from the Input/Output types in the rustdoc JSON.
+    /// Extracts field definitions from Input/Output types in rustdoc JSON.
     fn build_resource_from_operations(
         &self,
+        crate_data: &rustdoc_types::Crate,
         resource_name: &str,
         operations: Vec<(String, CrudOperation)>,
     ) -> ResourceDefinition {
@@ -219,6 +220,9 @@ impl AwsParser {
             update: None,
             delete: None,
         };
+
+        let mut create_input_struct = None;
+        let mut read_output_struct = None;
 
         // Map operations to CRUD
         for (op_name, crud_type) in operations {
@@ -230,11 +234,18 @@ impl AwsParser {
             match crud_type {
                 CrudOperation::Create => {
                     if ops.create.is_none() {
+                        // Track the Input struct name for field extraction
+                        // AWS SDK convention: {Operation}Input
+                        let input_name = self.to_pascal_case(&op_name) + "Input";
+                        create_input_struct = Some(input_name);
                         ops.create = Some(mapping);
                     }
                 }
                 CrudOperation::Read => {
                     if ops.read.is_none() {
+                        // Track the Output struct name for output extraction
+                        let output_name = self.to_pascal_case(&op_name) + "Output";
+                        read_output_struct = Some(output_name);
                         ops.read = Some(mapping);
                     }
                 }
@@ -251,16 +262,46 @@ impl AwsParser {
             }
         }
 
+        // Extract fields from Create operation's Input struct
+        let fields = if let Some(input_struct) = create_input_struct {
+            RustdocLoader::extract_struct_fields(crate_data, &input_struct)
+        } else {
+            vec![]
+        };
+
+        // Extract outputs from Read operation's Output struct
+        let outputs = if let Some(output_struct) = read_output_struct {
+            RustdocLoader::extract_struct_fields(crate_data, &output_struct)
+        } else {
+            vec![]
+        };
+
         ResourceDefinition {
             name: resource_name.to_string(),
             description: Some(format!(
                 "{} resource (auto-discovered from SDK)",
                 resource_name
             )),
-            fields: vec![],  // TODO: Extract from Input types in rustdoc JSON
-            outputs: vec![], // TODO: Extract from Output types in rustdoc JSON
+            fields,
+            outputs,
             operations: ops,
         }
+    }
+
+    /// Convert snake_case to PascalCase
+    ///
+    /// AWS SDK operations are in snake_case (create_bucket)
+    /// but struct names are in PascalCase (CreateBucketInput)
+    fn to_pascal_case(&self, s: &str) -> String {
+        s.split('_')
+            .map(|word| {
+                let mut chars = word.chars();
+                match chars.next() {
+                    None => String::new(),
+                    Some(first) => first.to_uppercase().chain(chars).collect(),
+                }
+            })
+            .collect()
     }
 }
 
