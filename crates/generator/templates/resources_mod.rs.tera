@@ -1,0 +1,5 @@
+//! Resource modules
+
+{% for name in resource_names %}pub mod {{ name }};
+pub use {{ name }}::{{ name | capitalize }};
+{% endfor %}
