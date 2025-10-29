@@ -51,7 +51,7 @@ enum Commands {
         version: String,
     },
 
-    /// Generate a provider from a spec file
+    /// Generate a provider from a single spec file
     #[command(after_help = "EXAMPLES:\n  \
         # Generate from AWS Smithy spec\n  \
         hemmer-provider-generator generate \\\n    \
@@ -83,6 +83,60 @@ enum Commands {
         /// Service name (required for some formats)
         #[arg(long)]
         service: String,
+
+        /// API version
+        #[arg(long, default_value = "v1")]
+        version: String,
+
+        /// Output directory
+        #[arg(short, long, default_value = "./output")]
+        output: PathBuf,
+    },
+
+    /// Generate a unified provider from multiple spec files
+    #[command(after_help = "EXAMPLES:\n  \
+        # Generate unified AWS provider with S3 and DynamoDB\n  \
+        hemmer-provider-generator generate-unified \\\n    \
+        --provider aws \\\n    \
+        --specs s3.json,dynamodb.json \\\n    \
+        --format smithy \\\n    \
+        --output ./provider-aws\n\n  \
+        # Scan entire directory for specs\n  \
+        hemmer-provider-generator generate-unified \\\n    \
+        --provider aws \\\n    \
+        --spec-dir ./aws-sdk/models/ \\\n    \
+        --format smithy \\\n    \
+        --output ./provider-aws\n\n  \
+        # Filter services by pattern\n  \
+        hemmer-provider-generator generate-unified \\\n    \
+        --provider aws \\\n    \
+        --spec-dir ./aws-sdk/models/ \\\n    \
+        --filter s3,dynamodb,ec2 \\\n    \
+        --output ./provider-aws")]
+    GenerateUnified {
+        /// Provider name (e.g., "aws", "gcp", "azure")
+        #[arg(short, long)]
+        provider: String,
+
+        /// Comma-separated list of spec file paths
+        #[arg(short, long, value_delimiter = ',', conflicts_with = "spec_dir")]
+        specs: Option<Vec<PathBuf>>,
+
+        /// Directory containing spec files (alternative to --specs)
+        #[arg(long, conflicts_with = "specs")]
+        spec_dir: Option<PathBuf>,
+
+        /// Spec format (auto-detected if not specified)
+        #[arg(short, long)]
+        format: Option<SpecFormat>,
+
+        /// Comma-separated list of service names to include (filters discovered specs)
+        #[arg(long, value_delimiter = ',')]
+        filter: Option<Vec<String>>,
+
+        /// Comma-separated list of explicit service names (auto-detected if not specified)
+        #[arg(long, value_delimiter = ',')]
+        services: Option<Vec<String>>,
 
         /// API version
         #[arg(long, default_value = "v1")]
@@ -154,6 +208,29 @@ fn main() -> Result<()> {
                 output.as_path(),
                 cli.verbose,
             )?;
+        }
+
+        Commands::GenerateUnified {
+            provider,
+            specs,
+            spec_dir,
+            format,
+            filter,
+            services,
+            version,
+            output,
+        } => {
+            generate_unified_command(UnifiedConfig {
+                provider_name: &provider,
+                spec_paths: specs.as_deref(),
+                spec_dir: spec_dir.as_deref(),
+                format,
+                filter: filter.as_deref(),
+                service_names: services.as_deref(),
+                version: &version,
+                output: output.as_path(),
+                verbose: cli.verbose,
+            })?;
         }
     }
 
@@ -345,6 +422,179 @@ fn generate_command(
     Ok(())
 }
 
+/// Configuration for unified provider generation
+struct UnifiedConfig<'a> {
+    provider_name: &'a str,
+    spec_paths: Option<&'a [PathBuf]>,
+    spec_dir: Option<&'a Path>,
+    format: Option<SpecFormat>,
+    filter: Option<&'a [String]>,
+    service_names: Option<&'a [String]>,
+    version: &'a str,
+    output: &'a Path,
+    verbose: bool,
+}
+
+fn generate_unified_command(config: UnifiedConfig) -> Result<()> {
+    use hemmer_provider_generator_common::{Provider, ProviderDefinition};
+
+    // Discover spec files
+    let discovered_specs: Vec<PathBuf> = if let Some(dir) = config.spec_dir {
+        println!(
+            "{} Scanning directory for specs: {}",
+            "→".cyan(),
+            dir.display()
+        );
+        discover_specs(dir, config.format, config.filter, config.verbose)?
+    } else if let Some(paths) = config.spec_paths {
+        paths.to_vec()
+    } else {
+        anyhow::bail!("Either --specs or --spec-dir must be provided");
+    };
+
+    if discovered_specs.is_empty() {
+        anyhow::bail!("No spec files found");
+    }
+
+    println!(
+        "{} Generating unified {} provider from {} specs",
+        "→".cyan(),
+        config.provider_name.yellow(),
+        discovered_specs.len()
+    );
+
+    // Parse provider enum from string
+    let provider = match config.provider_name.to_lowercase().as_str() {
+        "aws" => Provider::Aws,
+        "gcp" => Provider::Gcp,
+        "azure" => Provider::Azure,
+        "kubernetes" | "k8s" => Provider::Kubernetes,
+        _ => anyhow::bail!("Unknown provider: {}", config.provider_name),
+    };
+
+    // Parse all specs
+    let mut services = Vec::new();
+    for (i, spec_path) in discovered_specs.iter().enumerate() {
+        println!(
+            "{} Parsing spec {}/{}: {}",
+            "→".cyan(),
+            i + 1,
+            discovered_specs.len(),
+            spec_path.display()
+        );
+
+        // Detect format if not specified
+        let detected_format = config.format.unwrap_or_else(|| detect_format(spec_path));
+
+        // Get service name
+        let inferred_name = infer_service_name(spec_path);
+        let service_name = config
+            .service_names
+            .and_then(|names| names.get(i).map(String::as_str))
+            .or(inferred_name.as_deref())
+            .unwrap_or("unknown");
+
+        if config.verbose {
+            println!("  Format: {}", detected_format);
+            println!("  Service: {}", service_name);
+        }
+
+        // Parse based on format
+        let service_def = match detected_format {
+            SpecFormat::Smithy => {
+                let parser =
+                    SmithyParser::from_file(spec_path, service_name, config.version).context(
+                        format!("Failed to load Smithy spec: {}", spec_path.display()),
+                    )?;
+                parser.parse().context("Failed to parse Smithy spec")?
+            }
+            SpecFormat::Openapi => {
+                let parser =
+                    OpenApiParser::from_file(spec_path, service_name, config.version).context(
+                        format!("Failed to load OpenAPI spec: {}", spec_path.display()),
+                    )?;
+                parser.parse().context("Failed to parse OpenAPI spec")?
+            }
+            SpecFormat::Discovery => {
+                let parser =
+                    DiscoveryParser::from_file(spec_path, service_name, config.version).context(
+                        format!("Failed to load Discovery doc: {}", spec_path.display()),
+                    )?;
+                parser.parse().context("Failed to parse Discovery doc")?
+            }
+            SpecFormat::Protobuf => {
+                let parser = ProtobufParser::from_file(spec_path, service_name, config.version)
+                    .context(format!(
+                        "Failed to load Protobuf FileDescriptorSet: {}",
+                        spec_path.display()
+                    ))?;
+                parser
+                    .parse()
+                    .context("Failed to parse Protobuf FileDescriptorSet")?
+            }
+        };
+
+        println!(
+            "{} Parsed {} resources from {}",
+            "✓".green(),
+            service_def.resources.len(),
+            service_name.yellow()
+        );
+
+        services.push(service_def);
+    }
+
+    // Create unified provider definition
+    let provider_def = ProviderDefinition {
+        provider,
+        provider_name: config.provider_name.to_string(),
+        sdk_version: config.version.to_string(),
+        services,
+    };
+
+    println!(
+        "\n{} Total: {} services, {} resources",
+        "✓".green().bold(),
+        provider_def.services.len(),
+        provider_def
+            .services
+            .iter()
+            .map(|s| s.resources.len())
+            .sum::<usize>()
+    );
+
+    // TODO: Generate unified provider (requires new generator implementation)
+    println!(
+        "\n{} {}",
+        "→".cyan(),
+        "Generating unified provider files...".bold()
+    );
+    println!(
+        "{} This feature is under development. Use 'generate' command for single services.",
+        "!".yellow()
+    );
+
+    // For now, just show what would be generated
+    println!("\n{}", "Would generate:".bold());
+    println!("  📁 {}/", config.output.display());
+    println!("  📄   ├── provider.k (unified schema)");
+    println!("  📄   ├── Cargo.toml");
+    println!("  📄   └── src/");
+    println!("  📄       ├── lib.rs ({}Provider)", config.provider_name);
+    for service in &provider_def.services {
+        println!("  📁       ├── {}/", service.name);
+        println!("  📄       │   ├── mod.rs");
+        println!(
+            "  📁       │   └── resources/ ({} resources)",
+            service.resources.len()
+        );
+    }
+
+    println!("\n{}", "See issue #16 for implementation progress".yellow());
+
+    Ok(())
+}
+
 /// Detect spec format from file extension and content
 fn detect_format(path: &Path) -> SpecFormat {
     // Try extension first
@@ -397,4 +647,93 @@ fn infer_service_name(path: &Path) -> Option<String> {
             .unwrap_or(s)
             .to_string()
     })
+}
+
+/// Discover spec files in a directory
+fn discover_specs(
+    dir: &Path,
+    format: Option<SpecFormat>,
+    filter: Option<&[String]>,
+    verbose: bool,
+) -> Result<Vec<PathBuf>> {
+    use std::fs;
+
+    if !dir.is_dir() {
+        anyhow::bail!("Not a directory: {}", dir.display());
+    }
+
+    let mut specs = Vec::new();
+
+    // Walk directory recursively
+    fn walk_dir(
+        dir: &Path,
+        specs: &mut Vec<PathBuf>,
+        format: Option<SpecFormat>,
+        filter: Option<&[String]>,
+        verbose: bool,
+    ) -> Result<()> {
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                // Recurse into subdirectories
+                walk_dir(&path, specs, format, filter, verbose)?;
+            } else if path.is_file() {
+                // Skip files with non-spec extensions
+                if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                    if !matches!(ext, "json" | "pb") {
+                        continue;
+                    }
+                } else {
+                    // Skip files without extensions
+                    continue;
+                }
+
+                // Check if file matches format
+                let detected_format = detect_format(&path);
+
+                // If format specified, skip non-matching files
+                if let Some(expected_format) = format {
+                    if !matches_format(&detected_format, &expected_format) {
+                        continue;
+                    }
+                }
+
+                // Check if service name matches filter
+                if let Some(filter_list) = filter {
+                    if let Some(service_name) = infer_service_name(&path) {
+                        if !filter_list.iter().any(|f| service_name.contains(f)) {
+                            if verbose {
+                                println!("  Skipping {} (not in filter)", path.display());
+                            }
+                            continue;
+                        }
+                    }
+                }
+
+                if verbose {
+                    println!("  Found: {}", path.display());
+                }
+                specs.push(path);
+            }
+        }
+        Ok(())
+    }
+
+    walk_dir(dir, &mut specs, format, filter, verbose)?;
+
+    println!("{} Discovered {} spec files", "✓".green(), specs.len());
+
+    Ok(specs)
+}
+
+fn matches_format(detected: &SpecFormat, expected: &SpecFormat) -> bool {
+    matches!(
+        (detected, expected),
+        (SpecFormat::Smithy, SpecFormat::Smithy)
+            | (SpecFormat::Openapi, SpecFormat::Openapi)
+            | (SpecFormat::Discovery, SpecFormat::Discovery)
+            | (SpecFormat::Protobuf, SpecFormat::Protobuf)
+    )
 }

@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+authors.workspace = true
+description = "Common types and utilities for Hemmer Provider Generator"
 
 [dependencies]
 serde = { workspace = true }

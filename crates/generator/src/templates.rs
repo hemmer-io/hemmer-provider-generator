@@ -74,7 +74,10 @@ fn kcl_type_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Resul
                 .strip_prefix("List<")
                 .and_then(|s| s.strip_suffix(">"))
                 .unwrap_or("str");
-            format!("[{}]", inner.replace("String", "str").replace("Integer", "int"))
+            format!(
+                "[{}]",
+                inner.replace("String", "str").replace("Integer", "int")
+            )
         }
         _ if kcl_type.starts_with("Map<") => {
             // Convert Map<K,V> -> {k: v}
