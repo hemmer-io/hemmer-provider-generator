@@ -4,9 +4,13 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+authors.workspace = true
+description = "Code generation engine for Hemmer infrastructure providers"
 
 [dependencies]
-hemmer-provider-generator-common = { path = "../common" }
+hemmer-provider-generator-common = { version = "0.1.1", path = "../common" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tera = { workspace = true }

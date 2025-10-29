@@ -12,7 +12,12 @@ version = "0.1.1"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/hemmer-io/hemmer-provider-generator"
+homepage = "https://github.com/hemmer-io/hemmer-provider-generator"
+documentation = "https://docs.rs/hemmer-provider-generator"
 authors = ["Hemmer Contributors"]
+keywords = ["infrastructure", "cloud", "codegen", "terraform", "pulumi"]
+categories = ["development-tools", "command-line-utilities"]
+description = "Automatically generate Hemmer infrastructure providers from cloud SDK specifications"
 
 [workspace.dependencies]
 # CLI
