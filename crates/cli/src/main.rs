@@ -220,17 +220,17 @@ fn main() -> Result<()> {
             version,
             output,
         } => {
-            generate_unified_command(
-                &provider,
-                specs.as_deref(),
-                spec_dir.as_deref(),
+            generate_unified_command(UnifiedConfig {
+                provider_name: &provider,
+                spec_paths: specs.as_deref(),
+                spec_dir: spec_dir.as_deref(),
                 format,
-                filter.as_deref(),
-                services.as_deref(),
-                &version,
-                output.as_path(),
-                cli.verbose,
-            )?;
+                filter: filter.as_deref(),
+                service_names: services.as_deref(),
+                version: &version,
+                output: output.as_path(),
+                verbose: cli.verbose,
+            })?;
         }
     }
 
@@ -422,29 +422,31 @@ fn generate_command(
     Ok(())
 }
 
-fn generate_unified_command(
-    provider_name: &str,
-    spec_paths: Option<&[PathBuf]>,
-    spec_dir: Option<&Path>,
+/// Configuration for unified provider generation
+struct UnifiedConfig<'a> {
+    provider_name: &'a str,
+    spec_paths: Option<&'a [PathBuf]>,
+    spec_dir: Option<&'a Path>,
     format: Option<SpecFormat>,
-    filter: Option<&[String]>,
-    service_names: Option<&[String]>,
-    version: &str,
-    output: &Path,
+    filter: Option<&'a [String]>,
+    service_names: Option<&'a [String]>,
+    version: &'a str,
+    output: &'a Path,
     verbose: bool,
-) -> Result<()> {
+}
+
+fn generate_unified_command(config: UnifiedConfig) -> Result<()> {
     use hemmer_provider_generator_common::{Provider, ProviderDefinition};
-    use std::fs;
 
     // Discover spec files
-    let discovered_specs: Vec<PathBuf> = if let Some(dir) = spec_dir {
+    let discovered_specs: Vec<PathBuf> = if let Some(dir) = config.spec_dir {
         println!(
             "{} Scanning directory for specs: {}",
             "→".cyan(),
             dir.display()
         );
-        discover_specs(dir, format, filter, verbose)?
-    } else if let Some(paths) = spec_paths {
+        discover_specs(dir, config.format, config.filter, config.verbose)?
+    } else if let Some(paths) = config.spec_paths {
         paths.to_vec()
     } else {
         anyhow::bail!("Either --specs or --spec-dir must be provided");
@@ -457,17 +459,17 @@ fn generate_unified_command(
     println!(
         "{} Generating unified {} provider from {} specs",
         "→".cyan(),
-        provider_name.yellow(),
+        config.provider_name.yellow(),
         discovered_specs.len()
     );
 
     // Parse provider enum from string
-    let provider = match provider_name.to_lowercase().as_str() {
+    let provider = match config.provider_name.to_lowercase().as_str() {
         "aws" => Provider::Aws,
         "gcp" => Provider::Gcp,
         "azure" => Provider::Azure,
         "kubernetes" | "k8s" => Provider::Kubernetes,
-        _ => anyhow::bail!("Unknown provider: {}", provider_name),
+        _ => anyhow::bail!("Unknown provider: {}", config.provider_name),
     };
 
     // Parse all specs
@@ -482,16 +484,17 @@ fn generate_unified_command(
         );
 
         // Detect format if not specified
-        let detected_format = format.unwrap_or_else(|| detect_format(spec_path));
+        let detected_format = config.format.unwrap_or_else(|| detect_format(spec_path));
 
         // Get service name
         let inferred_name = infer_service_name(spec_path);
-        let service_name = service_names
+        let service_name = config
+            .service_names
             .and_then(|names| names.get(i).map(String::as_str))
-            .or_else(|| inferred_name.as_deref())
+            .or(inferred_name.as_deref())
             .unwrap_or("unknown");
 
-        if verbose {
+        if config.verbose {
             println!("  Format: {}", detected_format);
             println!("  Service: {}", service_name);
         }
@@ -499,24 +502,32 @@ fn generate_unified_command(
         // Parse based on format
         let service_def = match detected_format {
             SpecFormat::Smithy => {
-                let parser = SmithyParser::from_file(spec_path, service_name, version)
-                    .context(format!("Failed to load Smithy spec: {}", spec_path.display()))?;
+                let parser =
+                    SmithyParser::from_file(spec_path, service_name, config.version).context(
+                        format!("Failed to load Smithy spec: {}", spec_path.display()),
+                    )?;
                 parser.parse().context("Failed to parse Smithy spec")?
             }
             SpecFormat::Openapi => {
-                let parser = OpenApiParser::from_file(spec_path, service_name, version)
-                    .context(format!("Failed to load OpenAPI spec: {}", spec_path.display()))?;
+                let parser =
+                    OpenApiParser::from_file(spec_path, service_name, config.version).context(
+                        format!("Failed to load OpenAPI spec: {}", spec_path.display()),
+                    )?;
                 parser.parse().context("Failed to parse OpenAPI spec")?
             }
             SpecFormat::Discovery => {
-                let parser = DiscoveryParser::from_file(spec_path, service_name, version)
-                    .context(format!("Failed to load Discovery doc: {}", spec_path.display()))?;
+                let parser =
+                    DiscoveryParser::from_file(spec_path, service_name, config.version).context(
+                        format!("Failed to load Discovery doc: {}", spec_path.display()),
+                    )?;
                 parser.parse().context("Failed to parse Discovery doc")?
             }
             SpecFormat::Protobuf => {
-                let parser = ProtobufParser::from_file(spec_path, service_name, version).context(
-                    format!("Failed to load Protobuf FileDescriptorSet: {}", spec_path.display()),
-                )?;
+                let parser = ProtobufParser::from_file(spec_path, service_name, config.version)
+                    .context(format!(
+                        "Failed to load Protobuf FileDescriptorSet: {}",
+                        spec_path.display()
+                    ))?;
                 parser
                     .parse()
                     .context("Failed to parse Protobuf FileDescriptorSet")?
@@ -536,8 +547,8 @@ fn generate_unified_command(
     // Create unified provider definition
     let provider_def = ProviderDefinition {
         provider,
-        provider_name: provider_name.to_string(),
-        sdk_version: version.to_string(),
+        provider_name: config.provider_name.to_string(),
+        sdk_version: config.version.to_string(),
         services,
     };
 
@@ -565,15 +576,18 @@ fn generate_unified_command(
 
     // For now, just show what would be generated
     println!("\n{}", "Would generate:".bold());
-    println!("  📁 {}/", output.display());
+    println!("  📁 {}/", config.output.display());
     println!("  📄   ├── provider.k (unified schema)");
     println!("  📄   ├── Cargo.toml");
     println!("  📄   └── src/");
-    println!("  📄       ├── lib.rs ({}Provider)", provider_name);
+    println!("  📄       ├── lib.rs ({}Provider)", config.provider_name);
     for service in &provider_def.services {
         println!("  📁       ├── {}/", service.name);
         println!("  📄       │   ├── mod.rs");
-        println!("  📁       │   └── resources/ ({} resources)", service.resources.len());
+        println!(
+            "  📁       │   └── resources/ ({} resources)",
+            service.resources.len()
+        );
     }
 
     println!("\n{}", "See issue #16 for implementation progress".yellow());
@@ -699,11 +713,7 @@ fn discover_specs(
 
     walk_dir(dir, &mut specs, format, filter, verbose)?;
 
-    println!(
-        "{} Discovered {} spec files",
-        "✓".green(),
-        specs.len()
-    );
+    println!("{} Discovered {} spec files", "✓".green(), specs.len());
 
     Ok(specs)
 }
