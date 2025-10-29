@@ -101,12 +101,17 @@ enum Commands {
         --specs s3.json,dynamodb.json \\\n    \
         --format smithy \\\n    \
         --output ./provider-aws\n\n  \
-        # Generate with explicit service names\n  \
+        # Scan entire directory for specs\n  \
         hemmer-provider-generator generate-unified \\\n    \
         --provider aws \\\n    \
-        --specs s3.json,dynamodb.json,ec2.json \\\n    \
-        --services s3,dynamodb,ec2 \\\n    \
+        --spec-dir ./aws-sdk/models/ \\\n    \
         --format smithy \\\n    \
+        --output ./provider-aws\n\n  \
+        # Filter services by pattern\n  \
+        hemmer-provider-generator generate-unified \\\n    \
+        --provider aws \\\n    \
+        --spec-dir ./aws-sdk/models/ \\\n    \
+        --filter s3,dynamodb,ec2 \\\n    \
         --output ./provider-aws")]
     GenerateUnified {
         /// Provider name (e.g., "aws", "gcp", "azure")
@@ -114,14 +119,22 @@ enum Commands {
         provider: String,
 
         /// Comma-separated list of spec file paths
-        #[arg(short, long, value_delimiter = ',')]
-        specs: Vec<PathBuf>,
+        #[arg(short, long, value_delimiter = ',', conflicts_with = "spec_dir")]
+        specs: Option<Vec<PathBuf>>,
+
+        /// Directory containing spec files (alternative to --specs)
+        #[arg(long, conflicts_with = "specs")]
+        spec_dir: Option<PathBuf>,
 
         /// Spec format (auto-detected if not specified)
         #[arg(short, long)]
         format: Option<SpecFormat>,
 
-        /// Comma-separated list of service names (auto-detected if not specified)
+        /// Comma-separated list of service names to include (filters discovered specs)
+        #[arg(long, value_delimiter = ',')]
+        filter: Option<Vec<String>>,
+
+        /// Comma-separated list of explicit service names (auto-detected if not specified)
         #[arg(long, value_delimiter = ',')]
         services: Option<Vec<String>>,
 
@@ -200,15 +213,19 @@ fn main() -> Result<()> {
         Commands::GenerateUnified {
             provider,
             specs,
+            spec_dir,
             format,
+            filter,
             services,
             version,
             output,
         } => {
             generate_unified_command(
                 &provider,
-                &specs,
+                specs.as_deref(),
+                spec_dir.as_deref(),
                 format,
+                filter.as_deref(),
                 services.as_deref(),
                 &version,
                 output.as_path(),
@@ -407,20 +424,41 @@ fn generate_command(
 
 fn generate_unified_command(
     provider_name: &str,
-    spec_paths: &[PathBuf],
+    spec_paths: Option<&[PathBuf]>,
+    spec_dir: Option<&Path>,
     format: Option<SpecFormat>,
+    filter: Option<&[String]>,
     service_names: Option<&[String]>,
     version: &str,
     output: &Path,
     verbose: bool,
 ) -> Result<()> {
     use hemmer_provider_generator_common::{Provider, ProviderDefinition};
+    use std::fs;
+
+    // Discover spec files
+    let discovered_specs: Vec<PathBuf> = if let Some(dir) = spec_dir {
+        println!(
+            "{} Scanning directory for specs: {}",
+            "→".cyan(),
+            dir.display()
+        );
+        discover_specs(dir, format, filter, verbose)?
+    } else if let Some(paths) = spec_paths {
+        paths.to_vec()
+    } else {
+        anyhow::bail!("Either --specs or --spec-dir must be provided");
+    };
+
+    if discovered_specs.is_empty() {
+        anyhow::bail!("No spec files found");
+    }
 
     println!(
         "{} Generating unified {} provider from {} specs",
         "→".cyan(),
         provider_name.yellow(),
-        spec_paths.len()
+        discovered_specs.len()
     );
 
     // Parse provider enum from string
@@ -434,12 +472,12 @@ fn generate_unified_command(
 
     // Parse all specs
     let mut services = Vec::new();
-    for (i, spec_path) in spec_paths.iter().enumerate() {
+    for (i, spec_path) in discovered_specs.iter().enumerate() {
         println!(
             "{} Parsing spec {}/{}: {}",
             "→".cyan(),
             i + 1,
-            spec_paths.len(),
+            discovered_specs.len(),
             spec_path.display()
         );
 
@@ -595,4 +633,87 @@ fn infer_service_name(path: &Path) -> Option<String> {
             .unwrap_or(s)
             .to_string()
     })
+}
+
+/// Discover spec files in a directory
+fn discover_specs(
+    dir: &Path,
+    format: Option<SpecFormat>,
+    filter: Option<&[String]>,
+    verbose: bool,
+) -> Result<Vec<PathBuf>> {
+    use std::fs;
+
+    if !dir.is_dir() {
+        anyhow::bail!("Not a directory: {}", dir.display());
+    }
+
+    let mut specs = Vec::new();
+
+    // Walk directory recursively
+    fn walk_dir(
+        dir: &Path,
+        specs: &mut Vec<PathBuf>,
+        format: Option<SpecFormat>,
+        filter: Option<&[String]>,
+        verbose: bool,
+    ) -> Result<()> {
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                // Recurse into subdirectories
+                walk_dir(&path, specs, format, filter, verbose)?;
+            } else if path.is_file() {
+                // Check if file matches format
+                let detected_format = detect_format(&path);
+
+                // If format specified, skip non-matching files
+                if let Some(expected_format) = format {
+                    if !matches_format(&detected_format, &expected_format) {
+                        continue;
+                    }
+                }
+
+                // Check if service name matches filter
+                if let Some(filter_list) = filter {
+                    if let Some(service_name) = infer_service_name(&path) {
+                        if !filter_list.iter().any(|f| service_name.contains(f)) {
+                            if verbose {
+                                println!("  Skipping {} (not in filter)", path.display());
+                            }
+                            continue;
+                        }
+                    }
+                }
+
+                if verbose {
+                    println!("  Found: {}", path.display());
+                }
+                specs.push(path);
+            }
+        }
+        Ok(())
+    }
+
+    walk_dir(dir, &mut specs, format, filter, verbose)?;
+
+    println!(
+        "{} Discovered {} spec files",
+        "✓".green(),
+        specs.len()
+    );
+
+    Ok(specs)
+}
+
+fn matches_format(detected: &SpecFormat, expected: &SpecFormat) -> bool {
+    matches!(
+        (detected, expected),
+        (SpecFormat::Smithy, SpecFormat::Smithy)
+            | (SpecFormat::Openapi, SpecFormat::Openapi)
+            | (SpecFormat::Discovery, SpecFormat::Discovery)
+            | (SpecFormat::Protobuf, SpecFormat::Protobuf)
+    )
 }
