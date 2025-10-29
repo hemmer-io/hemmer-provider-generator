@@ -8,6 +8,7 @@ homepage.workspace = true
 documentation.workspace = true
 authors.workspace = true
 description = "Multi-format parsers for cloud SDK specifications (Smithy, OpenAPI, Discovery, Protobuf)"
+readme = "README.md"
 
 [dependencies]
 hemmer-provider-generator-common = { version = "0.1.2", path = "../common" }
