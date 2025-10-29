@@ -28,9 +28,11 @@ mod rustdoc_loader;
 mod type_mapper;
 
 // Spec format parsers
+pub mod openapi;
 pub mod smithy;
 
 pub use aws::AwsParser;
+pub use openapi::OpenApiParser;
 pub use operation_mapper::{CrudOperation, OperationClassifier};
 pub use rustdoc_loader::RustdocLoader;
 pub use smithy::SmithyParser;
