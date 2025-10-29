@@ -1,0 +1,55 @@
+# {{ service_name | capitalize }} Provider for Hemmer
+
+Auto-generated provider for {{ service_name }} using {{ provider }} SDK version {{ sdk_version }}.
+
+## Resources
+
+This provider supports the following resources:
+
+{% for resource in resources %}
+### {{ resource.name | capitalize }}
+
+{{ resource.description | default(value="") }}
+
+**Operations:**
+{% if resource.operations.create %}- ✅ Create{% endif %}
+{% if resource.operations.read %}- ✅ Read{% endif %}
+{% if resource.operations.update %}- ✅ Update{% endif %}
+{% if resource.operations.delete %}- ✅ Delete{% endif %}
+
+**Fields:**
+{% for field in resource.fields %}- `{{ field.name }}` ({{ field.field_type | rust_type }}){% if field.required %} *required*{% endif %} - {{ field.description | default(value="") }}
+{% endfor %}
+
+{% endfor %}
+
+## Usage
+
+```rust
+use hemmer_{{ service_name }}_provider::{{ service_name | capitalize }}Provider;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let provider = {{ service_name | capitalize }}Provider::new().await?;
+
+    // Use resources
+{% for resource in resources %}
+    let {{ resource.name }} = provider.{{ resource.name }}();
+{% endfor %}
+
+    Ok(())
+}
+```
+
+## Generated Code
+
+This provider was automatically generated from SDK metadata using the Hemmer Provider Generator.
+
+- **Generator**: hemmer-provider-generator
+- **SDK**: {{ provider }} SDK v{{ sdk_version }}
+- **Service**: {{ service_name }}
+- **Generated**: {{ now() }}
+
+## License
+
+Apache-2.0

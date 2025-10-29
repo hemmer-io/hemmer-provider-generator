@@ -1,0 +1,25 @@
+[package]
+name = "hemmer-{{ service_name }}-provider"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Hemmer provider runtime (placeholder)
+# hemmer-runtime = "0.1"
+
+# SDK dependencies
+{% if provider == "Aws" %}aws-sdk-{{ service_name }} = "1"
+aws-config = "1"
+{% elif provider == "Gcp" %}# GCP SDK dependencies
+{% elif provider == "Azure" %}# Azure SDK dependencies
+{% endif %}
+
+# Standard dependencies
+anyhow = "1"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
