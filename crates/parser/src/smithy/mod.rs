@@ -2,7 +2,7 @@
 //!
 //! Parses AWS Smithy JSON AST format into ServiceDefinition IR.
 //!
-//! Smithy specs are available at: https://github.com/aws/api-models-aws
+//! Smithy specs are available at: <https://github.com/aws/api-models-aws>
 //!
 //! ## Format
 //! Smithy JSON AST contains:

@@ -25,7 +25,7 @@ pub struct DiscoveryDoc {
     #[serde(default)]
     pub description: Option<String>,
 
-    /// Root URL (e.g., "https://storage.googleapis.com/")
+    /// Root URL (e.g., "<https://storage.googleapis.com/>")
     #[serde(rename = "rootUrl")]
     pub root_url: String,
 
