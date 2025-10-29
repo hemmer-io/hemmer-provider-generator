@@ -305,6 +305,34 @@ impl AwsParser {
     }
 }
 
+/// Implementation of SdkParser trait for AWS SDK
+impl hemmer_provider_generator_common::SdkParser for AwsParser {
+    fn parse(&self) -> Result<ServiceDefinition> {
+        // Delegate to existing parse method
+        Self::parse(self)
+    }
+
+    fn supported_services(&self) -> Vec<String> {
+        // In hardcoded mode, only S3 is supported
+        // In rustdoc JSON mode, any service can be parsed
+        if self.rustdoc_json_path.is_some() {
+            // With rustdoc JSON, any AWS service is supported
+            vec![self.service_name.clone()]
+        } else {
+            // Hardcoded mode only supports S3
+            vec!["s3".to_string()]
+        }
+    }
+
+    fn metadata(&self) -> hemmer_provider_generator_common::SdkMetadata {
+        hemmer_provider_generator_common::SdkMetadata {
+            provider: Provider::Aws,
+            sdk_version: self.sdk_version.clone(),
+            sdk_name: "aws-sdk-rust".to_string(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -360,5 +388,44 @@ mod tests {
         assert!(grouped.contains_key("object"));
         assert_eq!(grouped["bucket"].len(), 3); // create, delete, get
         assert_eq!(grouped["object"].len(), 2); // put, get
+    }
+
+    #[test]
+    fn test_sdk_parser_trait() {
+        use hemmer_provider_generator_common::SdkParser;
+
+        let parser = AwsParser::new("s3", "1.0.0");
+
+        // Test parse method through trait
+        let result = SdkParser::parse(&parser);
+        assert!(result.is_ok());
+
+        // Test supported_services
+        let services = parser.supported_services();
+        assert_eq!(services, vec!["s3"]);
+
+        // Test metadata
+        let metadata = parser.metadata();
+        assert_eq!(metadata.provider, Provider::Aws);
+        assert_eq!(metadata.sdk_version, "1.0.0");
+        assert_eq!(metadata.sdk_name, "aws-sdk-rust");
+    }
+
+    #[test]
+    fn test_sdk_parser_trait_with_rustdoc() {
+        use hemmer_provider_generator_common::SdkParser;
+        use std::path::PathBuf;
+
+        let parser =
+            AwsParser::with_rustdoc_json("s3", "1.0.0", PathBuf::from("/path/to/rustdoc.json"));
+
+        // Test supported_services with rustdoc JSON path
+        let services = parser.supported_services();
+        assert_eq!(services, vec!["s3"]);
+
+        // Test metadata
+        let metadata = parser.metadata();
+        assert_eq!(metadata.provider, Provider::Aws);
+        assert_eq!(metadata.sdk_name, "aws-sdk-rust");
     }
 }
