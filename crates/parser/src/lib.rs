@@ -28,10 +28,12 @@ mod rustdoc_loader;
 mod type_mapper;
 
 // Spec format parsers
+pub mod discovery;
 pub mod openapi;
 pub mod smithy;
 
 pub use aws::AwsParser;
+pub use discovery::DiscoveryParser;
 pub use openapi::OpenApiParser;
 pub use operation_mapper::{CrudOperation, OperationClassifier};
 pub use rustdoc_loader::RustdocLoader;
