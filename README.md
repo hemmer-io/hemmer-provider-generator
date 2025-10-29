@@ -22,18 +22,33 @@ Transform any cloud provider's official SDK specification into a complete, worki
 
 #### Option 1: Install from crates.io (Recommended)
 
+**All Platforms:**
 ```bash
 cargo install hemmer-provider-generator
 ```
 
-#### Option 2: Install from GitHub
+#### Option 2: Quick Install Script
 
+**Linux/macOS:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/hemmer-io/hemmer-provider-generator/main/install.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/hemmer-io/hemmer-provider-generator/main/install.ps1 | iex
+```
+
+#### Option 3: Install from GitHub
+
+**All Platforms:**
 ```bash
 cargo install --git https://github.com/hemmer-io/hemmer-provider-generator.git
 ```
 
-#### Option 3: Build from source
+#### Option 4: Build from source
 
+**Linux/macOS:**
 ```bash
 # Clone the repository
 git clone https://github.com/hemmer-io/hemmer-provider-generator.git
@@ -47,10 +62,18 @@ cargo build --release
 ./target/release/hemmer-provider-generator --help
 ```
 
-#### Option 4: Quick Install Script
+**Windows (PowerShell):**
+```powershell
+# Clone the repository
+git clone https://github.com/hemmer-io/hemmer-provider-generator.git
+cd hemmer-provider-generator
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/hemmer-io/hemmer-provider-generator/main/install.sh | sh
+# Build and install
+cargo install --path crates/cli
+
+# Or just build
+cargo build --release
+.\target\release\hemmer-provider-generator.exe --help
 ```
 
 ### Usage
