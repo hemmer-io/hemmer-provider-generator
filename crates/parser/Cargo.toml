@@ -12,6 +12,9 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 rustdoc-types = "0.56"
+prost = "0.13"
+prost-types = "0.13"
+prost-reflect = "0.14"
 
 [dev-dependencies]
 mockall = { workspace = true }
