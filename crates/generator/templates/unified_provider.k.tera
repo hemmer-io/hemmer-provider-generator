@@ -1,0 +1,36 @@
+# {{ provider_name | capitalize }} Provider
+# Generated from {{ provider_name }} SDK version {{ sdk_version }}
+#
+# This unified provider implements CRUD operations for multiple services.
+
+schema {{ provider_name | capitalize }}Provider:
+    """
+    Unified provider for {{ provider_name }} with multiple services.
+
+    Auto-generated from SDK metadata.
+    """
+{% for service in services %}
+
+    # {{ service.name | capitalize }} Service
+    schema {{ service.name | capitalize }}Service:
+        """
+        Service for {{ service.name }} resources.
+        """
+{% for resource in service.resources %}
+
+        schema {{ resource.name | capitalize }}:
+            """
+            {{ resource.description | default(value=resource.name ~ " resource") }}
+            """
+{% for field in resource.fields %}
+            {{ field.name }}: {{ field.field_type | kcl_type }}{% if not field.required %}?{% endif %}  # {{ field.description | default(value="") }}
+{% endfor %}
+{% if resource.outputs %}
+
+            # Outputs
+{% for output in resource.outputs %}
+            {{ output.name }}_output?: {{ output.field_type | kcl_type }}  # {{ output.description | default(value="") }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endfor %}

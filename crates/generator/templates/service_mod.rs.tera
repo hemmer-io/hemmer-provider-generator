@@ -1,0 +1,34 @@
+//! {{ service.name | capitalize }} Service
+//!
+//! Auto-generated service module for {{ service.name }}
+
+pub mod resources;
+
+use crate::{ProviderError, Result};
+
+/// Service handler for {{ service.name }}
+pub struct {{ service.name | capitalize }}Service<'a> {
+    provider: &'a crate::{{ provider_name | capitalize }}Provider,
+}
+
+impl<'a> {{ service.name | capitalize }}Service<'a> {
+    pub(crate) fn new(provider: &'a crate::{{ provider_name | capitalize }}Provider) -> Self {
+        Self { provider }
+    }
+
+{% for resource in service.resources %}    /// Get {{ resource.name }} resource handler
+    pub fn {{ resource.name }}(&self) -> resources::{{ resource.name | capitalize }}<'_> {
+        resources::{{ resource.name | capitalize }}::new(self.provider)
+    }
+{% endfor %}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_service_creation() {
+        // Service creation test
+    }
+}

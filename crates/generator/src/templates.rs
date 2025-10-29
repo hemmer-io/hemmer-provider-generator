@@ -51,6 +51,78 @@ pub fn load_templates() -> Result<Tera> {
     Ok(tera)
 }
 
+/// Load templates for unified multi-service provider generation
+pub fn load_unified_templates() -> Result<Tera> {
+    let mut tera = Tera::default();
+
+    // Register custom filters
+    tera.register_filter("kcl_type", kcl_type_filter);
+    tera.register_filter("rust_type", rust_type_filter);
+    tera.register_filter("capitalize", capitalize_filter);
+
+    // Add unified templates
+    tera.add_raw_template(
+        "unified_provider.k",
+        include_str!("../templates/unified_provider.k.tera"),
+    )
+    .map_err(|e| {
+        GeneratorError::Generation(format!("Failed to load unified_provider.k template: {}", e))
+    })?;
+
+    tera.add_raw_template(
+        "unified_Cargo.toml",
+        include_str!("../templates/unified_Cargo.toml.tera"),
+    )
+    .map_err(|e| {
+        GeneratorError::Generation(format!("Failed to load unified_Cargo.toml template: {}", e))
+    })?;
+
+    tera.add_raw_template(
+        "unified_lib.rs",
+        include_str!("../templates/unified_lib.rs.tera"),
+    )
+    .map_err(|e| {
+        GeneratorError::Generation(format!("Failed to load unified_lib.rs template: {}", e))
+    })?;
+
+    tera.add_raw_template(
+        "service_mod.rs",
+        include_str!("../templates/service_mod.rs.tera"),
+    )
+    .map_err(|e| {
+        GeneratorError::Generation(format!("Failed to load service_mod.rs template: {}", e))
+    })?;
+
+    tera.add_raw_template(
+        "unified_resource.rs",
+        include_str!("../templates/unified_resource.rs.tera"),
+    )
+    .map_err(|e| {
+        GeneratorError::Generation(format!(
+            "Failed to load unified_resource.rs template: {}",
+            e
+        ))
+    })?;
+
+    tera.add_raw_template(
+        "resources_mod.rs",
+        include_str!("../templates/resources_mod.rs.tera"),
+    )
+    .map_err(|e| {
+        GeneratorError::Generation(format!("Failed to load resources_mod.rs template: {}", e))
+    })?;
+
+    tera.add_raw_template(
+        "unified_README.md",
+        include_str!("../templates/unified_README.md.tera"),
+    )
+    .map_err(|e| {
+        GeneratorError::Generation(format!("Failed to load unified_README.md template: {}", e))
+    })?;
+
+    Ok(tera)
+}
+
 /// Filter to convert FieldType to KCL type
 fn kcl_type_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
     use hemmer_provider_generator_common::FieldType;

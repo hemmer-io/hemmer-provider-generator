@@ -1,0 +1,101 @@
+//! {{ resource.name | capitalize }} resource
+//!
+//! {{ resource.description | default(value="Auto-generated resource") }}
+
+use crate::{ProviderError, Result};
+use std::collections::HashMap;
+
+/// {{ resource.name | capitalize }} resource handler
+pub struct {{ resource.name | capitalize }}<'a> {
+    provider: &'a crate::{{ provider_name | capitalize }}Provider,
+}
+
+impl<'a> {{ resource.name | capitalize }}<'a> {
+    pub(crate) fn new(provider: &'a crate::{{ provider_name | capitalize }}Provider) -> Self {
+        Self { provider }
+    }
+
+{% if resource.operations.create %}
+    /// Create a new {{ resource.name }}
+    ///
+    /// Note: Parameter types are simplified. SDK may require specific enums/types.
+    /// TODO: Convert String parameters to appropriate SDK types as needed.
+    #[allow(unused_variables)]
+    pub async fn create(&self{% for field in resource.fields %}, {{ field.name }}: {% if field.required %}{{ field.field_type | rust_type }}{% else %}Option<{{ field.field_type | rust_type }}>{% endif %}{% endfor %}) -> Result<String> {
+{% if provider == "Aws" %}
+        // Note: This is a generated skeleton. Type conversions may be needed.
+        // TODO: Implement actual SDK call with proper type mapping
+        let _client = &self.provider.{{ service_name }}_client;
+
+        // Placeholder: Real implementation needs SDK-specific type conversion
+        Ok(format!("{{ resource.name }}_created"))
+{% else %}
+        todo!("Implement create for {{ provider }}")
+{% endif %}
+    }
+{% endif %}
+
+{% if resource.operations.read %}
+    /// Read/describe a {{ resource.name }}
+    ///
+    /// TODO: Map `id` parameter to appropriate SDK field(s)
+    #[allow(unused_variables)]
+    pub async fn read(&self, id: &str) -> Result<()> {
+{% if provider == "Aws" %}
+        // Note: This is a generated skeleton.
+        // TODO: Map resource ID to SDK parameters
+        let _client = &self.provider.{{ service_name }}_client;
+
+        Ok(())
+{% else %}
+        todo!("Implement read for {{ provider }}")
+{% endif %}
+    }
+{% endif %}
+
+{% if resource.operations.update %}
+    /// Update a {{ resource.name }}
+    ///
+    /// TODO: Map `id` and update fields to appropriate SDK parameters
+    #[allow(unused_variables)]
+    pub async fn update(&self, id: &str{% for field in resource.fields %}{% if not field.immutable %}, {{ field.name }}: Option<{{ field.field_type | rust_type }}>{% endif %}{% endfor %}) -> Result<()> {
+{% if provider == "Aws" %}
+        // Note: This is a generated skeleton.
+        // TODO: Map resource ID and update fields to SDK parameters
+        let _client = &self.provider.{{ service_name }}_client;
+
+        Ok(())
+{% else %}
+        todo!("Implement update for {{ provider }}")
+{% endif %}
+    }
+{% endif %}
+
+{% if resource.operations.delete %}
+    /// Delete a {{ resource.name }}
+    ///
+    /// TODO: Map `id` parameter to appropriate SDK field(s)
+    #[allow(unused_variables)]
+    pub async fn delete(&self, id: &str) -> Result<()> {
+{% if provider == "Aws" %}
+        // Note: This is a generated skeleton.
+        // TODO: Map resource ID to SDK parameters
+        let _client = &self.provider.{{ service_name }}_client;
+
+        Ok(())
+{% else %}
+        todo!("Implement delete for {{ provider }}")
+{% endif %}
+    }
+{% endif %}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_{{ resource.name }}_operations() {
+        // Test {{ resource.name }} CRUD operations
+    }
+}
