@@ -8,6 +8,7 @@ homepage.workspace = true
 documentation.workspace = true
 authors.workspace = true
 description = "Common types and utilities for Hemmer Provider Generator"
+readme = "README.md"
 
 [dependencies]
 serde = { workspace = true }

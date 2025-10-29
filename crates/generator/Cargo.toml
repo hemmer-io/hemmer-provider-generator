@@ -8,6 +8,7 @@ homepage.workspace = true
 documentation.workspace = true
 authors.workspace = true
 description = "Code generation engine for Hemmer infrastructure providers"
+readme = "README.md"
 
 [dependencies]
 hemmer-provider-generator-common = { version = "0.1.2", path = "../common" }
