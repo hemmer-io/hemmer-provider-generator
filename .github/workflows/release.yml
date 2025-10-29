@@ -8,32 +8,12 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: write
+
 jobs:
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-      version: ${{ steps.get_version.outputs.version }}
-    steps:
-      - name: Get version from tag
-        id: get_version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-
   build:
     name: Build - ${{ matrix.target }}
-    needs: create-release
     strategy:
       matrix:
         include:
@@ -49,6 +29,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Get version from tag
+        id: get_version
+        shell: bash
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -62,56 +47,40 @@ jobs:
         if: matrix.os != 'windows-latest'
         run: |
           cd target/${{ matrix.target }}/release
-          tar czf hemmer-provider-generator-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.tar.gz hemmer-provider-generator
-          shasum -a 256 hemmer-provider-generator-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.tar.gz > hemmer-provider-generator-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.tar.gz.sha256
+          tar czf hemmer-provider-generator-${{ steps.get_version.outputs.version }}-${{ matrix.target }}.tar.gz hemmer-provider-generator
+          shasum -a 256 hemmer-provider-generator-${{ steps.get_version.outputs.version }}-${{ matrix.target }}.tar.gz > hemmer-provider-generator-${{ steps.get_version.outputs.version }}-${{ matrix.target }}.tar.gz.sha256
 
       - name: Package (Windows)
         if: matrix.os == 'windows-latest'
         run: |
           cd target/${{ matrix.target }}/release
-          7z a hemmer-provider-generator-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.zip hemmer-provider-generator.exe
-          certutil -hashfile hemmer-provider-generator-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.zip SHA256 > hemmer-provider-generator-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.zip.sha256
+          7z a hemmer-provider-generator-${{ steps.get_version.outputs.version }}-${{ matrix.target }}.zip hemmer-provider-generator.exe
+          certutil -hashfile hemmer-provider-generator-${{ steps.get_version.outputs.version }}-${{ matrix.target }}.zip SHA256 > hemmer-provider-generator-${{ steps.get_version.outputs.version }}-${{ matrix.target }}.zip.sha256
 
-      - name: Upload Release Asset (Unix)
-        if: matrix.os != 'windows-latest'
-        uses: actions/upload-release-asset@v1
+      - name: Upload Release Assets
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: target/${{ matrix.target }}/release/hemmer-provider-generator-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.tar.gz
-          asset_name: hemmer-provider-generator-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.tar.gz
-          asset_content_type: application/gzip
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          cd target/${{ matrix.target }}/release
 
-      - name: Upload Checksum (Unix)
-        if: matrix.os != 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: target/${{ matrix.target }}/release/hemmer-provider-generator-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.tar.gz.sha256
-          asset_name: hemmer-provider-generator-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.tar.gz.sha256
-          asset_content_type: text/plain
+          # Create release if it doesn't exist (first job will create it)
+          if ! gh release view ${{ github.ref_name }} &>/dev/null; then
+            gh release create ${{ github.ref_name }} \
+              --title "Release ${{ github.ref_name }}" \
+              --notes "Release ${{ github.ref_name }}"
+          fi
 
-      - name: Upload Release Asset (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: target/${{ matrix.target }}/release/hemmer-provider-generator-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.zip
-          asset_name: hemmer-provider-generator-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.zip
-          asset_content_type: application/zip
-
-      - name: Upload Checksum (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: target/${{ matrix.target }}/release/hemmer-provider-generator-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.zip.sha256
-          asset_name: hemmer-provider-generator-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.zip.sha256
-          asset_content_type: text/plain
+          # Upload Unix archives
+          if [ "${{ matrix.os }}" != "windows-latest" ]; then
+            gh release upload ${{ github.ref_name }} \
+              hemmer-provider-generator-${{ steps.get_version.outputs.version }}-${{ matrix.target }}.tar.gz \
+              hemmer-provider-generator-${{ steps.get_version.outputs.version }}-${{ matrix.target }}.tar.gz.sha256 \
+              --clobber
+          else
+            # Upload Windows archives
+            gh release upload ${{ github.ref_name }} \
+              hemmer-provider-generator-${{ steps.get_version.outputs.version }}-${{ matrix.target }}.zip \
+              hemmer-provider-generator-${{ steps.get_version.outputs.version }}-${{ matrix.target }}.zip.sha256 \
+              --clobber
+          fi
