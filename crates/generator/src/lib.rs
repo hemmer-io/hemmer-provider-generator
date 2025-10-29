@@ -63,7 +63,7 @@ impl ProviderGenerator {
         let rendered = self
             .tera
             .render("provider.k", &context)
-            .map_err(|e| GeneratorError::Generation(format!("Template error: {}", e)))?;
+            .map_err(|e| GeneratorError::Generation(format!("Template error: {:?}", e)))?;
 
         let output_path = output_dir.join("provider.k");
         fs::write(output_path, rendered).map_err(|e| {
