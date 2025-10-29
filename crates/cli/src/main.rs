@@ -680,6 +680,16 @@ fn discover_specs(
                 // Recurse into subdirectories
                 walk_dir(&path, specs, format, filter, verbose)?;
             } else if path.is_file() {
+                // Skip files with non-spec extensions
+                if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                    if !matches!(ext, "json" | "pb") {
+                        continue;
+                    }
+                } else {
+                    // Skip files without extensions
+                    continue;
+                }
+
                 // Check if file matches format
                 let detected_format = detect_format(&path);
 
