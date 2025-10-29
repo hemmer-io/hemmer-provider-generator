@@ -1,0 +1,70 @@
+# {{ provider_name | capitalize }} Provider for Hemmer
+
+Auto-generated unified provider for {{ provider_name }} using SDK version {{ sdk_version }}.
+
+This provider includes **{{ services | length }} services** with a total of **{{ total_resources }} resources**.
+
+## Services
+
+{% for service in services %}### {{ service.name | capitalize }} ({{ service.resources | length }} resources)
+
+{% for resource in service.resources %}- **{{ resource.name | capitalize }}**{% if resource.operations.create %} [C{% endif %}{% if resource.operations.read %}R{% endif %}{% if resource.operations.update %}U{% endif %}{% if resource.operations.delete %}D]{% endif %} - {{ resource.description | default(value="") }}
+{% endfor %}
+{% endfor %}
+
+## Usage
+
+```rust
+use hemmer_{{ provider_name }}_provider::{{ provider_name | capitalize }}Provider;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Create unified provider
+    let provider = {{ provider_name | capitalize }}Provider::new().await?;
+
+    // Access services
+{% for service in services %}    let {{ service.name }}_service = provider.{{ service.name }}();
+{% endfor %}
+    // Use resources from any service
+{% for service in services %}{% for resource in service.resources %}    let {{ resource.name }} = {{ service.name }}_service.{{ resource.name }}();
+{% endfor %}{% endfor %}
+    Ok(())
+}
+```
+
+## Service Details
+
+{% for service in services %}### {{ service.name | capitalize }}
+
+**Resources:**
+
+{% for resource in service.resources %}#### {{ resource.name | capitalize }}
+
+{{ resource.description | default(value="") }}
+
+**Operations:**
+{% if resource.operations.create %}- ✅ Create{% endif %}
+{% if resource.operations.read %}- ✅ Read{% endif %}
+{% if resource.operations.update %}- ✅ Update{% endif %}
+{% if resource.operations.delete %}- ✅ Delete{% endif %}
+
+**Fields:**
+{% for field in resource.fields %}- `{{ field.name }}` ({{ field.field_type | rust_type }}){% if field.required %} *required*{% endif %} - {{ field.description | default(value="") }}
+{% endfor %}
+
+{% endfor %}
+{% endfor %}
+
+## Generated Code
+
+This provider was automatically generated from SDK metadata using the Hemmer Provider Generator.
+
+- **Generator**: hemmer-provider-generator
+- **SDK**: {{ provider_name }} SDK v{{ sdk_version }}
+- **Services**: {{ services | length }}
+- **Total Resources**: {{ total_resources }}
+- **Generated**: {{ now() }}
+
+## License
+
+Apache-2.0

@@ -5,7 +5,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use colored::*;
-use hemmer_provider_generator_generator::ProviderGenerator;
+use hemmer_provider_generator_generator::{ProviderGenerator, UnifiedProviderGenerator};
 use hemmer_provider_generator_parser::{
     DiscoveryParser, OpenApiParser, ProtobufParser, SmithyParser,
 };
@@ -552,45 +552,45 @@ fn generate_unified_command(config: UnifiedConfig) -> Result<()> {
         services,
     };
 
+    let total_resources: usize = provider_def
+        .services
+        .iter()
+        .map(|s| s.resources.len())
+        .sum();
+
     println!(
         "\n{} Total: {} services, {} resources",
         "✓".green().bold(),
         provider_def.services.len(),
-        provider_def
-            .services
-            .iter()
-            .map(|s| s.resources.len())
-            .sum::<usize>()
+        total_resources
     );
 
-    // TODO: Generate unified provider (requires new generator implementation)
+    // Generate unified provider
     println!(
         "\n{} {}",
         "→".cyan(),
         "Generating unified provider files...".bold()
     );
+
+    let generator =
+        UnifiedProviderGenerator::new(provider_def).context("Failed to create generator")?;
+    generator
+        .generate_to_directory(config.output)
+        .context("Failed to generate unified provider")?;
+
+    println!("\n{}", "✓ Generation complete!".green().bold());
+    println!("\n{}", "Generated files:".bold());
+    println!("  📄 {}/provider.k", config.output.display());
+    println!("  📄 {}/Cargo.toml", config.output.display());
+    println!("  📄 {}/README.md", config.output.display());
+    println!("  📄 {}/src/lib.rs", config.output.display());
+    println!("\n{}", "Next steps:".bold());
+    println!("  1. Review generated files in {}", config.output.display());
     println!(
-        "{} This feature is under development. Use 'generate' command for single services.",
-        "!".yellow()
+        "  2. Build provider: cd {} && cargo build",
+        config.output.display()
     );
-
-    // For now, just show what would be generated
-    println!("\n{}", "Would generate:".bold());
-    println!("  📁 {}/", config.output.display());
-    println!("  📄   ├── provider.k (unified schema)");
-    println!("  📄   ├── Cargo.toml");
-    println!("  📄   └── src/");
-    println!("  📄       ├── lib.rs ({}Provider)", config.provider_name);
-    for service in &provider_def.services {
-        println!("  📁       ├── {}/", service.name);
-        println!("  📄       │   ├── mod.rs");
-        println!(
-            "  📁       │   └── resources/ ({} resources)",
-            service.resources.len()
-        );
-    }
-
-    println!("\n{}", "See issue #16 for implementation progress".yellow());
+    println!("  3. Install in hemmer provider directory");
 
     Ok(())
 }
