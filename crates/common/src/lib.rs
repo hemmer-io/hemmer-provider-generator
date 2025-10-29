@@ -42,6 +42,21 @@ pub enum Provider {
     Kubernetes,
 }
 
+/// Intermediate representation of a unified cloud provider with multiple services
+///
+/// This represents a complete provider (e.g., AWS) with all its services.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderDefinition {
+    /// Cloud provider type
+    pub provider: Provider,
+    /// Provider name for code generation (e.g., "aws", "gcp")
+    pub provider_name: String,
+    /// SDK version
+    pub sdk_version: String,
+    /// All services in this provider
+    pub services: Vec<ServiceDefinition>,
+}
+
 /// Intermediate representation of a cloud service (e.g., aws-sdk-s3)
 ///
 /// This is the output of the parser phase and input to the generator phase.

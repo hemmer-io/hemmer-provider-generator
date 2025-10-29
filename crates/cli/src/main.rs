@@ -51,7 +51,7 @@ enum Commands {
         version: String,
     },
 
-    /// Generate a provider from a spec file
+    /// Generate a provider from a single spec file
     #[command(after_help = "EXAMPLES:\n  \
         # Generate from AWS Smithy spec\n  \
         hemmer-provider-generator generate \\\n    \
@@ -83,6 +83,47 @@ enum Commands {
         /// Service name (required for some formats)
         #[arg(long)]
         service: String,
+
+        /// API version
+        #[arg(long, default_value = "v1")]
+        version: String,
+
+        /// Output directory
+        #[arg(short, long, default_value = "./output")]
+        output: PathBuf,
+    },
+
+    /// Generate a unified provider from multiple spec files
+    #[command(after_help = "EXAMPLES:\n  \
+        # Generate unified AWS provider with S3 and DynamoDB\n  \
+        hemmer-provider-generator generate-unified \\\n    \
+        --provider aws \\\n    \
+        --specs s3.json,dynamodb.json \\\n    \
+        --format smithy \\\n    \
+        --output ./provider-aws\n\n  \
+        # Generate with explicit service names\n  \
+        hemmer-provider-generator generate-unified \\\n    \
+        --provider aws \\\n    \
+        --specs s3.json,dynamodb.json,ec2.json \\\n    \
+        --services s3,dynamodb,ec2 \\\n    \
+        --format smithy \\\n    \
+        --output ./provider-aws")]
+    GenerateUnified {
+        /// Provider name (e.g., "aws", "gcp", "azure")
+        #[arg(short, long)]
+        provider: String,
+
+        /// Comma-separated list of spec file paths
+        #[arg(short, long, value_delimiter = ',')]
+        specs: Vec<PathBuf>,
+
+        /// Spec format (auto-detected if not specified)
+        #[arg(short, long)]
+        format: Option<SpecFormat>,
+
+        /// Comma-separated list of service names (auto-detected if not specified)
+        #[arg(long, value_delimiter = ',')]
+        services: Option<Vec<String>>,
 
         /// API version
         #[arg(long, default_value = "v1")]
@@ -150,6 +191,25 @@ fn main() -> Result<()> {
                 spec.as_path(),
                 format,
                 &service,
+                &version,
+                output.as_path(),
+                cli.verbose,
+            )?;
+        }
+
+        Commands::GenerateUnified {
+            provider,
+            specs,
+            format,
+            services,
+            version,
+            output,
+        } => {
+            generate_unified_command(
+                &provider,
+                &specs,
+                format,
+                services.as_deref(),
                 &version,
                 output.as_path(),
                 cli.verbose,
@@ -341,6 +401,144 @@ fn generate_command(
         output.display()
     );
     println!("  3. Install in hemmer provider directory");
+
+    Ok(())
+}
+
+fn generate_unified_command(
+    provider_name: &str,
+    spec_paths: &[PathBuf],
+    format: Option<SpecFormat>,
+    service_names: Option<&[String]>,
+    version: &str,
+    output: &Path,
+    verbose: bool,
+) -> Result<()> {
+    use hemmer_provider_generator_common::{Provider, ProviderDefinition};
+
+    println!(
+        "{} Generating unified {} provider from {} specs",
+        "→".cyan(),
+        provider_name.yellow(),
+        spec_paths.len()
+    );
+
+    // Parse provider enum from string
+    let provider = match provider_name.to_lowercase().as_str() {
+        "aws" => Provider::Aws,
+        "gcp" => Provider::Gcp,
+        "azure" => Provider::Azure,
+        "kubernetes" | "k8s" => Provider::Kubernetes,
+        _ => anyhow::bail!("Unknown provider: {}", provider_name),
+    };
+
+    // Parse all specs
+    let mut services = Vec::new();
+    for (i, spec_path) in spec_paths.iter().enumerate() {
+        println!(
+            "{} Parsing spec {}/{}: {}",
+            "→".cyan(),
+            i + 1,
+            spec_paths.len(),
+            spec_path.display()
+        );
+
+        // Detect format if not specified
+        let detected_format = format.unwrap_or_else(|| detect_format(spec_path));
+
+        // Get service name
+        let inferred_name = infer_service_name(spec_path);
+        let service_name = service_names
+            .and_then(|names| names.get(i).map(String::as_str))
+            .or_else(|| inferred_name.as_deref())
+            .unwrap_or("unknown");
+
+        if verbose {
+            println!("  Format: {}", detected_format);
+            println!("  Service: {}", service_name);
+        }
+
+        // Parse based on format
+        let service_def = match detected_format {
+            SpecFormat::Smithy => {
+                let parser = SmithyParser::from_file(spec_path, service_name, version)
+                    .context(format!("Failed to load Smithy spec: {}", spec_path.display()))?;
+                parser.parse().context("Failed to parse Smithy spec")?
+            }
+            SpecFormat::Openapi => {
+                let parser = OpenApiParser::from_file(spec_path, service_name, version)
+                    .context(format!("Failed to load OpenAPI spec: {}", spec_path.display()))?;
+                parser.parse().context("Failed to parse OpenAPI spec")?
+            }
+            SpecFormat::Discovery => {
+                let parser = DiscoveryParser::from_file(spec_path, service_name, version)
+                    .context(format!("Failed to load Discovery doc: {}", spec_path.display()))?;
+                parser.parse().context("Failed to parse Discovery doc")?
+            }
+            SpecFormat::Protobuf => {
+                let parser = ProtobufParser::from_file(spec_path, service_name, version).context(
+                    format!("Failed to load Protobuf FileDescriptorSet: {}", spec_path.display()),
+                )?;
+                parser
+                    .parse()
+                    .context("Failed to parse Protobuf FileDescriptorSet")?
+            }
+        };
+
+        println!(
+            "{} Parsed {} resources from {}",
+            "✓".green(),
+            service_def.resources.len(),
+            service_name.yellow()
+        );
+
+        services.push(service_def);
+    }
+
+    // Create unified provider definition
+    let provider_def = ProviderDefinition {
+        provider,
+        provider_name: provider_name.to_string(),
+        sdk_version: version.to_string(),
+        services,
+    };
+
+    println!(
+        "\n{} Total: {} services, {} resources",
+        "✓".green().bold(),
+        provider_def.services.len(),
+        provider_def
+            .services
+            .iter()
+            .map(|s| s.resources.len())
+            .sum::<usize>()
+    );
+
+    // TODO: Generate unified provider (requires new generator implementation)
+    println!(
+        "\n{} {}",
+        "→".cyan(),
+        "Generating unified provider files...".bold()
+    );
+    println!(
+        "{} This feature is under development. Use 'generate' command for single services.",
+        "!".yellow()
+    );
+
+    // For now, just show what would be generated
+    println!("\n{}", "Would generate:".bold());
+    println!("  📁 {}/", output.display());
+    println!("  📄   ├── provider.k (unified schema)");
+    println!("  📄   ├── Cargo.toml");
+    println!("  📄   └── src/");
+    println!("  📄       ├── lib.rs ({}Provider)", provider_name);
+    for service in &provider_def.services {
+        println!("  📁       ├── {}/", service.name);
+        println!("  📄       │   ├── mod.rs");
+        println!("  📁       │   └── resources/ ({} resources)", service.resources.len());
+    }
+
+    println!("\n{}", "See issue #16 for implementation progress".yellow());
 
     Ok(())
 }
