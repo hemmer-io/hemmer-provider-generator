@@ -84,3 +84,34 @@ jobs:
               hemmer-provider-generator-${{ steps.get_version.outputs.version }}-${{ matrix.target }}.zip.sha256 \
               --clobber
           fi
+
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    needs: build
+    environment: release
+    permissions:
+      id-token: write  # Required for OIDC token exchange
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Authenticate with crates.io
+        uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+
+      - name: Publish crates in dependency order
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          # Publish crates in dependency order
+          cd crates/common && cargo publish --allow-dirty
+          sleep 30  # Wait for crates.io to process
+          cd ../parser && cargo publish --allow-dirty
+          sleep 30
+          cd ../generator && cargo publish --allow-dirty
+          sleep 30
+          cd ../cli && cargo publish --allow-dirty

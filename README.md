@@ -11,9 +11,10 @@ Transform any cloud provider's official SDK specification into a complete, worki
 
 - **Universal Spec Support**: Parse Smithy, OpenAPI, Discovery, and Protobuf specifications
 - **Multi-Cloud**: Support for AWS, GCP, Azure, Kubernetes, and gRPC services
+- **Unified Providers**: Generate single providers with multiple services (Phase 6 complete)
 - **Auto-Detection**: Automatically detects spec format from file extension and content
 - **Complete Generation**: Generates provider.k manifest, Rust code, tests, and documentation
-- **Production Ready**: Fully tested (55 tests), clippy-clean, formatted code
+- **Production Ready**: Fully tested (57 tests), clippy-clean, formatted code
 - **Zero Manual Coding**: End-to-end automation from spec to provider package
 
 ## 🚀 Quick Start
@@ -118,7 +119,7 @@ hemmer-provider-generator generate \
 
 **Output**: Complete provider package with provider.k, Cargo.toml, and Rust code
 
-#### 3. Generate Unified Multi-Service Provider (New!)
+#### 3. Generate Unified Multi-Service Provider
 
 Generate a single provider package with multiple cloud services:
 
@@ -407,8 +408,9 @@ When using `--filter`, service names are matched against spec filenames:
 
 ## 🧪 Testing
 
-- **55 total tests** across workspace
+- **57 total tests** across workspace
 - **4 integration tests** (one per spec format)
+- **3 unified generation tests**
 - **Multi-platform CI** (Ubuntu, macOS, Windows)
 - **All tests passing** ✅
 
@@ -437,7 +439,7 @@ All 6 planned phases are complete:
 - ✅ Phase 3: Generator Core
 - ✅ Phase 4: Multi-Cloud Parsers (OpenAPI, Discovery, Protobuf)
 - ✅ Phase 5: CLI Interface & Production Readiness
-- ✅ Phase 6: Unified Multi-Service Providers ([#16](https://github.com/hemmer-io/hemmer-provider-generator/issues/16), [PR #19](https://github.com/hemmer-io/hemmer-provider-generator/pull/19))
+- ✅ Phase 6: Unified Multi-Service Providers ([#16](https://github.com/hemmer-io/hemmer-provider-generator/issues/16), [#22](https://github.com/hemmer-io/hemmer-provider-generator/issues/22), [PR #19](https://github.com/hemmer-io/hemmer-provider-generator/pull/19), [PR #23](https://github.com/hemmer-io/hemmer-provider-generator/pull/23))
 
 ### Feature Status
 
@@ -451,6 +453,7 @@ All 6 planned phases are complete:
 | Directory scanning | ✅ Complete | Recursive discovery |
 | Service filtering | ✅ Complete | Pattern matching |
 | Multi-service parsing | ✅ Complete | Parse & aggregate multiple services |
+| Multi-service generation | ✅ Complete | Full code generation for unified providers |
 | Cross-platform install | ✅ Complete | Linux, macOS, Windows |
 
 ## 📊 Test Results
@@ -462,5 +465,5 @@ All 6 planned phases are complete:
 
 ---
 
-**Version**: 0.1.2
+**Version**: 0.2.0
 **Last Updated**: 2025-10-29

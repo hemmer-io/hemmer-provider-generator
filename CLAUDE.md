@@ -168,20 +168,24 @@ hemmer-provider-generator/
 
 **Implementation**: `crates/cli/src/main.rs` (388 lines)
 
-### Phase 6: Multi-Service Unified Providers ✅ COMPLETE
-**Status**: Completed (Issue #16, PR #19)
+### Phase 6: Multi-Service Unified Providers ✅ COMPLETE (v0.2.0)
+**Status**: Completed (Issue #16, #22, PR #19, #23)
 
 **Deliverables**:
-- [x] ProviderDefinition IR for multi-service providers
-- [x] `generate-unified` CLI command
-- [x] Recursive directory scanning (--spec-dir flag)
-- [x] Service name filtering (--filter flag)
-- [x] Auto-detection of spec format from file extensions (.json, .pb)
-- [x] Multi-spec parsing and aggregation
-- [x] Real-world testing with 400+ AWS services, 18 GCP services, K8s specs
-- [x] Cross-platform installation (Linux/macOS/Windows)
-- [x] Install scripts (install.sh, install.ps1)
-- [x] Comprehensive documentation
+- [x] ProviderDefinition IR for multi-service providers (PR #19)
+- [x] `generate-unified` CLI command with parsing/aggregation (PR #19)
+- [x] Recursive directory scanning (--spec-dir flag) (PR #19)
+- [x] Service name filtering (--filter flag) (PR #19)
+- [x] Auto-detection of spec format from file extensions (.json, .pb) (PR #19)
+- [x] Multi-spec parsing and aggregation (PR #19)
+- [x] Real-world testing with 400+ AWS services, 18 GCP services, K8s specs (PR #19)
+- [x] Cross-platform installation (Linux/macOS/Windows) (PR #19)
+- [x] Install scripts (install.sh, install.ps1) (PR #19)
+- [x] UnifiedProviderGenerator implementation (PR #23)
+- [x] Unified provider templates (6 new .tera files) (PR #23)
+- [x] Complete code generation for multi-service providers (PR #23)
+- [x] Integration tests for unified generation (PR #23)
+- [x] Comprehensive documentation (PR #19, #23)
 
 **Key Features**:
 1. **Directory Scanning**: Recursively discovers all spec files in directory tree
@@ -217,7 +221,7 @@ hemmer-provider-generator generate-unified \
   --output ./provider-gcp
 ```
 
-**Note**: Code generation for unified providers (templates) is tracked separately and not required for Phase 6 completion. The parsing, aggregation, and CLI functionality are complete and production-ready.
+**Implementation Complete**: Full unified provider code generation is now production-ready (v0.2.0).
 
 ## Supported Spec Formats
 
@@ -297,7 +301,7 @@ hemmer-provider-generator generate \
   --output ./providers/grpc-storage
 ```
 
-### Generate-Unified Command (Multi-Service Provider) ⭐ NEW
+### Generate-Unified Command (Multi-Service Provider)
 
 Generate a single provider with multiple services:
 
@@ -517,10 +521,10 @@ Different parsers use different strategies to identify CRUD operations:
 ## Testing
 
 ### Test Coverage
-- **55 total tests** across workspace
+- **57 total tests** across workspace
 - **32 unit tests** in parser crate
 - **4 integration tests** (one per spec format)
-- **1 generator integration test**
+- **3 generator integration tests** (single-service + 2 unified tests)
 - All tests passing ✅
 
 ### Running Tests
@@ -677,9 +681,8 @@ All issues are tracked on GitHub:
 
 ## What's Next
 
-The core tool is complete with all 6 phases. Potential future enhancements:
+The core tool is complete with all 6 phases (v0.2.0). Potential future enhancements:
 
-- **Unified Provider Templates**: Complete code generation for multi-service providers (Phase 6.1)
 - Add more spec format parsers (Terraform schema, Pulumi schema)
 - Enhanced template customization options
 - Config file support (`.hemmergen.yaml`)
@@ -694,4 +697,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
 
 ---
 
-**Last Updated**: 2025-10-29 (All 6 Phases Complete - Production Ready with Multi-Service Support)
+**Last Updated**: 2025-10-29 (v0.2.0 - All 6 Phases Complete - Production Ready with Full Multi-Service Support)

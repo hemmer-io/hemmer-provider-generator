@@ -1,0 +1,12 @@
+# CODEOWNERS file for hemmer-provider-generator
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything in the repo
+* @hemmer-io/engineering
+
+# Specific ownership for critical paths
+/.github/ @hemmer-io/engineering
+/Cargo.toml @hemmer-io/engineering
+/CLAUDE.md @hemmer-io/engineering
+/README.md @hemmer-io/engineering
+/CHANGELOG.md @hemmer-io/engineering
