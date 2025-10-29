@@ -1,0 +1,70 @@
+//! {{ service_name | capitalize }} Provider for Hemmer
+//!
+//! Auto-generated from {{ provider }} SDK version {{ sdk_version }}
+
+pub mod resources;
+
+use thiserror::Error;
+
+/// Provider error types
+#[derive(Error, Debug)]
+pub enum ProviderError {
+    #[error("Resource not found: {0}")]
+    NotFound(String),
+
+    #[error("SDK error: {0}")]
+    SdkError(String),
+
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+}
+
+/// Result type for provider operations
+pub type Result<T> = std::result::Result<T, ProviderError>;
+
+/// Provider client
+pub struct {{ service_name | capitalize }}Provider {
+{% if provider == "Aws" %}
+    client: aws_sdk_{{ service_name }}::Client,
+{% elif provider == "Gcp" %}
+    // GCP client
+{% elif provider == "Azure" %}
+    // Azure client
+{% endif %}
+}
+
+impl {{ service_name | capitalize }}Provider {
+    /// Create a new provider instance
+    pub async fn new() -> Result<Self> {
+{% if provider == "Aws" %}
+        let config = aws_config::load_from_env().await;
+        let client = aws_sdk_{{ service_name }}::Client::new(&config);
+{% endif %}
+        Ok(Self {
+{% if provider == "Aws" %}
+            client,
+{% endif %}
+        })
+    }
+
+{% for resource in resources %}
+    /// Get {{ resource.name }} resource handler
+    pub fn {{ resource.name }}(&self) -> resources::{{ resource.name | capitalize }} {
+        resources::{{ resource.name | capitalize }}::new(self)
+    }
+{% endfor %}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_provider_creation() {
+        // Provider creation test
+        // Note: This will fail without proper credentials
+    }
+}
