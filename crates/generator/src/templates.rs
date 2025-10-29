@@ -53,45 +53,51 @@ pub fn load_templates() -> Result<Tera> {
 
 /// Filter to convert FieldType to KCL type
 fn kcl_type_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
-    let field_type_str = value
-        .as_str()
-        .ok_or_else(|| tera::Error::msg("kcl_type filter expects a string"))?;
+    use hemmer_provider_generator_common::FieldType;
 
-    // Parse the field_type string (this is a simplified version)
-    // In a real implementation, we'd deserialize the FieldType enum
-    let kcl_type = match field_type_str {
-        "String" => "str",
-        "Integer" => "int",
-        "Boolean" => "bool",
-        "Float" => "float",
-        "DateTime" => "str",
-        _ if field_type_str.starts_with("List") => "[str]", // Simplified
-        _ if field_type_str.starts_with("Map") => "{str: str}", // Simplified
-        _ => "str",                                         // Default fallback
+    // Deserialize the FieldType from the Serde Value
+    let field_type: FieldType = serde_json::from_value(value.clone())
+        .map_err(|e| tera::Error::msg(format!("Failed to deserialize FieldType: {}", e)))?;
+
+    // Use the built-in to_kcl_type method
+    let kcl_type = field_type.to_kcl_type();
+
+    // Convert KCL types to KCL syntax
+    let kcl_syntax = match kcl_type.as_str() {
+        "String" => "str".to_string(),
+        "Integer" => "int".to_string(),
+        "Boolean" => "bool".to_string(),
+        "Float" => "float".to_string(),
+        _ if kcl_type.starts_with("List<") => {
+            // Extract inner type and convert: List<String> -> [str]
+            let inner = kcl_type
+                .strip_prefix("List<")
+                .and_then(|s| s.strip_suffix(">"))
+                .unwrap_or("str");
+            format!("[{}]", inner.replace("String", "str").replace("Integer", "int"))
+        }
+        _ if kcl_type.starts_with("Map<") => {
+            // Convert Map<K,V> -> {k: v}
+            "{str: str}".to_string() // Simplified for now
+        }
+        _ => "str".to_string(), // Default fallback
     };
 
-    Ok(Value::String(kcl_type.to_string()))
+    Ok(Value::String(kcl_syntax))
 }
 
 /// Filter to convert FieldType to Rust type
 fn rust_type_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
-    let field_type_str = value
-        .as_str()
-        .ok_or_else(|| tera::Error::msg("rust_type filter expects a string"))?;
+    use hemmer_provider_generator_common::FieldType;
 
-    // Parse the field_type string (simplified version)
-    let rust_type = match field_type_str {
-        "String" => "String",
-        "Integer" => "i64",
-        "Boolean" => "bool",
-        "Float" => "f64",
-        "DateTime" => "String",
-        _ if field_type_str.starts_with("List") => "Vec<String>", // Simplified
-        _ if field_type_str.starts_with("Map") => "HashMap<String, String>", // Simplified
-        _ => "String",                                            // Default fallback
-    };
+    // Deserialize the FieldType from the Serde Value
+    let field_type: FieldType = serde_json::from_value(value.clone())
+        .map_err(|e| tera::Error::msg(format!("Failed to deserialize FieldType: {}", e)))?;
 
-    Ok(Value::String(rust_type.to_string()))
+    // Use the built-in to_rust_type method
+    let rust_type = field_type.to_rust_type();
+
+    Ok(Value::String(rust_type))
 }
 
 /// Filter to capitalize first letter
