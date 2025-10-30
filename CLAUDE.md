@@ -697,4 +697,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
 
 ---
 
-**Last Updated**: 2025-10-29 (v0.2.1 - Bug Fixes and Robustness Improvements)
+**Last Updated**: 2025-10-29 (v0.2.2 - Name Sanitization and Formatting Fixes)
