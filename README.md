@@ -465,5 +465,5 @@ All 6 planned phases are complete:
 
 ---
 
-**Version**: 0.2.0
+**Version**: 0.2.1
 **Last Updated**: 2025-10-29
