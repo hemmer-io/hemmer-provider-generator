@@ -43,10 +43,11 @@ async fn main() -> anyhow::Result<()> {
 {{ resource.description | default(value="") }}
 
 **Operations:**
-{% if resource.operations.create %}- ✅ Create{% endif %}
-{% if resource.operations.read %}- ✅ Read{% endif %}
-{% if resource.operations.update %}- ✅ Update{% endif %}
-{% if resource.operations.delete %}- ✅ Delete{% endif %}
+{% if resource.operations.create %}- ✅ Create
+{% endif %}{% if resource.operations.read %}- ✅ Read
+{% endif %}{% if resource.operations.update %}- ✅ Update
+{% endif %}{% if resource.operations.delete %}- ✅ Delete
+{% endif %}
 
 **Fields:**
 {% for field in resource.fields %}- `{{ field.name }}` ({{ field.field_type | rust_type }}){% if field.required %} *required*{% endif %} - {{ field.description | default(value="") }}

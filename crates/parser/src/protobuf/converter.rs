@@ -233,22 +233,40 @@ fn convert_protobuf_kind_to_field_type(_pool: &DescriptorPool, kind: &Kind) -> R
 /// Convert PascalCase to snake_case
 fn to_snake_case(s: &str) -> String {
     let mut result = String::new();
-    let mut prev_is_lowercase = false;
+    let chars: Vec<char> = s.chars().collect();
 
-    for (i, ch) in s.chars().enumerate() {
+    for (i, &ch) in chars.iter().enumerate() {
         if ch.is_uppercase() {
-            if i > 0 && prev_is_lowercase {
+            // Add underscore before uppercase if:
+            // 1. Not at the start
+            // 2. Previous char is lowercase or digit
+            // 3. OR next char is lowercase (handles HTTPServer -> http_server)
+            let should_add_underscore = i > 0
+                && (chars[i - 1].is_lowercase()
+                    || chars[i - 1].is_ascii_digit()
+                    || (i + 1 < chars.len() && chars[i + 1].is_lowercase()));
+
+            if should_add_underscore && !result.ends_with('_') {
                 result.push('_');
             }
             result.push(ch.to_ascii_lowercase());
-            prev_is_lowercase = false;
+        } else if ch == '-' || ch == ' ' {
+            // Replace hyphens and spaces with underscores
+            if !result.is_empty() && !result.ends_with('_') {
+                result.push('_');
+            }
         } else {
             result.push(ch);
-            prev_is_lowercase = true;
         }
     }
 
-    result
+    // Clean up multiple consecutive underscores
+    while result.contains("__") {
+        result = result.replace("__", "_");
+    }
+
+    // Strip leading and trailing underscores
+    result.trim_matches('_').to_string()
 }
 
 #[cfg(test)]
