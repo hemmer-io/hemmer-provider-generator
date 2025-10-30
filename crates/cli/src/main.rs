@@ -474,6 +474,7 @@ fn generate_unified_command(config: UnifiedConfig) -> Result<()> {
 
     // Parse all specs
     let mut services = Vec::new();
+    let mut skipped = 0;
     for (i, spec_path) in discovered_specs.iter().enumerate() {
         println!(
             "{} Parsing spec {}/{}: {}",
@@ -499,49 +500,70 @@ fn generate_unified_command(config: UnifiedConfig) -> Result<()> {
             println!("  Service: {}", service_name);
         }
 
-        // Parse based on format
-        let service_def = match detected_format {
-            SpecFormat::Smithy => {
-                let parser =
-                    SmithyParser::from_file(spec_path, service_name, config.version).context(
-                        format!("Failed to load Smithy spec: {}", spec_path.display()),
-                    )?;
-                parser.parse().context("Failed to parse Smithy spec")?
-            }
-            SpecFormat::Openapi => {
-                let parser =
-                    OpenApiParser::from_file(spec_path, service_name, config.version).context(
-                        format!("Failed to load OpenAPI spec: {}", spec_path.display()),
-                    )?;
-                parser.parse().context("Failed to parse OpenAPI spec")?
-            }
-            SpecFormat::Discovery => {
-                let parser =
-                    DiscoveryParser::from_file(spec_path, service_name, config.version).context(
-                        format!("Failed to load Discovery doc: {}", spec_path.display()),
-                    )?;
-                parser.parse().context("Failed to parse Discovery doc")?
-            }
-            SpecFormat::Protobuf => {
-                let parser = ProtobufParser::from_file(spec_path, service_name, config.version)
-                    .context(format!(
-                        "Failed to load Protobuf FileDescriptorSet: {}",
-                        spec_path.display()
-                    ))?;
-                parser
-                    .parse()
-                    .context("Failed to parse Protobuf FileDescriptorSet")?
-            }
-        };
+        // Parse based on format - wrap in error handling to skip failures
+        let service_def_result: Result<_> = (|| {
+            let service_def = match detected_format {
+                SpecFormat::Smithy => {
+                    let parser = SmithyParser::from_file(spec_path, service_name, config.version)
+                        .context(format!("Failed to load Smithy spec: {}", spec_path.display()))?;
+                    parser.parse().context("Failed to parse Smithy spec")?
+                }
+                SpecFormat::Openapi => {
+                    let parser = OpenApiParser::from_file(spec_path, service_name, config.version)
+                        .context(format!("Failed to load OpenAPI spec: {}", spec_path.display()))?;
+                    parser.parse().context("Failed to parse OpenAPI spec")?
+                }
+                SpecFormat::Discovery => {
+                    let parser =
+                        DiscoveryParser::from_file(spec_path, service_name, config.version).context(
+                            format!("Failed to load Discovery doc: {}", spec_path.display()),
+                        )?;
+                    parser.parse().context("Failed to parse Discovery doc")?
+                }
+                SpecFormat::Protobuf => {
+                    let parser =
+                        ProtobufParser::from_file(spec_path, service_name, config.version).context(
+                            format!(
+                                "Failed to load Protobuf FileDescriptorSet: {}",
+                                spec_path.display()
+                            ),
+                        )?;
+                    parser
+                        .parse()
+                        .context("Failed to parse Protobuf FileDescriptorSet")?
+                }
+            };
+            Ok(service_def)
+        })();
 
+        match service_def_result {
+            Ok(service_def) => {
+                println!(
+                    "{} Parsed {} resources from {}",
+                    "✓".green(),
+                    service_def.resources.len(),
+                    service_name.yellow()
+                );
+                services.push(service_def);
+            }
+            Err(e) => {
+                eprintln!(
+                    "{} Skipping {}: {}",
+                    "⚠".yellow(),
+                    spec_path.display(),
+                    e
+                );
+                skipped += 1;
+            }
+        }
+    }
+
+    if skipped > 0 {
         println!(
-            "{} Parsed {} resources from {}",
-            "✓".green(),
-            service_def.resources.len(),
-            service_name.yellow()
+            "\n{} Skipped {} spec(s) due to parse errors",
+            "⚠".yellow(),
+            skipped
         );
-
-        services.push(service_def);
     }
 
     // Create unified provider definition
@@ -677,6 +699,16 @@ fn discover_specs(
             let path = entry.path();
 
             if path.is_dir() {
+                // Skip __test__ directories
+                if let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) {
+                    if dir_name.contains("__test__") {
+                        if verbose {
+                            println!("  Skipping test directory: {}", path.display());
+                        }
+                        continue;
+                    }
+                }
+
                 // Recurse into subdirectories
                 walk_dir(&path, specs, format, filter, verbose)?;
             } else if path.is_file() {
