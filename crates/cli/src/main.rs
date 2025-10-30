@@ -659,15 +659,65 @@ fn detect_format(path: &Path) -> SpecFormat {
 /// Infer service name from filename
 fn infer_service_name(path: &Path) -> Option<String> {
     path.file_stem().and_then(|s| s.to_str()).map(|s| {
-        // Remove version suffixes like "-v1"
-        s.split('-')
-            .next()
-            .unwrap_or(s)
-            .split('.')
-            .next()
-            .unwrap_or(s)
-            .to_string()
+        let mut name = s.to_string();
+
+        // Remove common domain suffixes (e.g., .k8s.io, .apiserver, .googleapis.com)
+        name = name
+            .replace(".k8s.io", "")
+            .replace(".apiserver", "")
+            .replace(".googleapis.com", "")
+            .replace(".azure.com", "");
+
+        // Remove common spec file suffixes
+        name = name
+            .replace("_openapi", "")
+            .replace("-openapi", "")
+            .replace("_discovery", "")
+            .replace("-discovery", "");
+
+        // Remove version suffixes like "-v1", "__v1"
+        name = name.split("__v").next().unwrap_or(&name).to_string();
+        name = name.split("-v").next().unwrap_or(&name).to_string();
+
+        // Split on . and take first part (handles remaining dots)
+        name = name.split('.').next().unwrap_or(&name).to_string();
+
+        // Apply snake_case conversion to clean up __ and format properly
+        sanitize_name(&name)
     })
+}
+
+/// Sanitize a name for use as Rust identifier (module/directory name)
+fn sanitize_name(s: &str) -> String {
+    let mut result = String::new();
+    let chars: Vec<char> = s.chars().collect();
+
+    for (i, &ch) in chars.iter().enumerate() {
+        if ch.is_uppercase() {
+            let should_add_underscore = i > 0
+                && (chars[i - 1].is_lowercase()
+                    || chars[i - 1].is_ascii_digit()
+                    || (i + 1 < chars.len() && chars[i + 1].is_lowercase()));
+            if should_add_underscore && !result.ends_with('_') {
+                result.push('_');
+            }
+            result.push(ch.to_ascii_lowercase());
+        } else if ch == '-' || ch == ' ' || ch == '.' {
+            if !result.is_empty() && !result.ends_with('_') {
+                result.push('_');
+            }
+        } else {
+            result.push(ch);
+        }
+    }
+
+    // Clean up multiple consecutive underscores
+    while result.contains("__") {
+        result = result.replace("__", "_");
+    }
+
+    // Remove leading/trailing underscores
+    result.trim_matches('_').to_string()
 }
 
 /// Discover spec files in a directory

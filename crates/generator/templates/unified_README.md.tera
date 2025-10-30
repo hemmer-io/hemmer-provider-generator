@@ -8,7 +8,7 @@ This provider includes **{{ services | length }} services** with a total of **{{
 
 {% for service in services %}### {{ service.name | capitalize }} ({{ service.resources | length }} resources)
 
-{% for resource in service.resources %}- **{{ resource.name | capitalize }}**{% if resource.operations.create %} [C{% endif %}{% if resource.operations.read %}R{% endif %}{% if resource.operations.update %}U{% endif %}{% if resource.operations.delete %}D]{% endif %} - {{ resource.description | default(value="") }}
+{% for resource in service.resources %}- **{{ resource.name | capitalize }}** {% if resource.operations.create or resource.operations.read or resource.operations.update or resource.operations.delete %}[{% if resource.operations.create %}C{% endif %}{% if resource.operations.read %}R{% endif %}{% if resource.operations.update %}U{% endif %}{% if resource.operations.delete %}D{% endif %}]{% endif %} - {{ resource.description | default(value="") }}
 {% endfor %}
 {% endfor %}
 

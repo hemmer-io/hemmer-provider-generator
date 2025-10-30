@@ -279,6 +279,13 @@ impl OpenApiSpec {
                 // Capitalize and singularize
                 let mut resource = segment.to_string();
 
+                // Remove domain suffixes (e.g., .k8s.io, .googleapis.com, .apiserver, .azure.com)
+                resource = resource
+                    .replace(".k8s.io", "")
+                    .replace(".googleapis.com", "")
+                    .replace(".apiserver", "")
+                    .replace(".azure.com", "");
+
                 // Remove trailing 's' for plurals
                 if resource.ends_with('s') && resource.len() > 1 {
                     resource.pop();
