@@ -504,30 +504,34 @@ fn generate_unified_command(config: UnifiedConfig) -> Result<()> {
         let service_def_result: Result<_> = (|| {
             let service_def = match detected_format {
                 SpecFormat::Smithy => {
-                    let parser = SmithyParser::from_file(spec_path, service_name, config.version)
-                        .context(format!("Failed to load Smithy spec: {}", spec_path.display()))?;
+                    let parser =
+                        SmithyParser::from_file(spec_path, service_name, config.version).context(
+                            format!("Failed to load Smithy spec: {}", spec_path.display()),
+                        )?;
                     parser.parse().context("Failed to parse Smithy spec")?
                 }
                 SpecFormat::Openapi => {
-                    let parser = OpenApiParser::from_file(spec_path, service_name, config.version)
-                        .context(format!("Failed to load OpenAPI spec: {}", spec_path.display()))?;
+                    let parser =
+                        OpenApiParser::from_file(spec_path, service_name, config.version).context(
+                            format!("Failed to load OpenAPI spec: {}", spec_path.display()),
+                        )?;
                     parser.parse().context("Failed to parse OpenAPI spec")?
                 }
                 SpecFormat::Discovery => {
                     let parser =
-                        DiscoveryParser::from_file(spec_path, service_name, config.version).context(
-                            format!("Failed to load Discovery doc: {}", spec_path.display()),
-                        )?;
+                        DiscoveryParser::from_file(spec_path, service_name, config.version)
+                            .context(format!(
+                                "Failed to load Discovery doc: {}",
+                                spec_path.display()
+                            ))?;
                     parser.parse().context("Failed to parse Discovery doc")?
                 }
                 SpecFormat::Protobuf => {
-                    let parser =
-                        ProtobufParser::from_file(spec_path, service_name, config.version).context(
-                            format!(
-                                "Failed to load Protobuf FileDescriptorSet: {}",
-                                spec_path.display()
-                            ),
-                        )?;
+                    let parser = ProtobufParser::from_file(spec_path, service_name, config.version)
+                        .context(format!(
+                            "Failed to load Protobuf FileDescriptorSet: {}",
+                            spec_path.display()
+                        ))?;
                     parser
                         .parse()
                         .context("Failed to parse Protobuf FileDescriptorSet")?
@@ -547,12 +551,7 @@ fn generate_unified_command(config: UnifiedConfig) -> Result<()> {
                 services.push(service_def);
             }
             Err(e) => {
-                eprintln!(
-                    "{} Skipping {}: {}",
-                    "⚠".yellow(),
-                    spec_path.display(),
-                    e
-                );
+                eprintln!("{} Skipping {}: {}", "⚠".yellow(), spec_path.display(), e);
                 skipped += 1;
             }
         }

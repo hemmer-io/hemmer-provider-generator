@@ -310,11 +310,10 @@ fn to_snake_case(s: &str) -> String {
             // 1. Not at the start
             // 2. Previous char is lowercase or digit
             // 3. OR next char is lowercase (handles HTTPServer -> http_server)
-            let should_add_underscore = i > 0 && (
-                chars[i - 1].is_lowercase() ||
-                chars[i - 1].is_ascii_digit() ||
-                (i + 1 < chars.len() && chars[i + 1].is_lowercase())
-            );
+            let should_add_underscore = i > 0
+                && (chars[i - 1].is_lowercase()
+                    || chars[i - 1].is_ascii_digit()
+                    || (i + 1 < chars.len() && chars[i + 1].is_lowercase()));
 
             if should_add_underscore && !result.ends_with('_') {
                 result.push('_');
