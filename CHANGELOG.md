@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2025-10-29
+
+### Fixed
+
+- **Service Name Sanitization** (#29)
+  - Enhanced `infer_service_name()` to remove domain suffixes (`.k8s.io`, `.apiserver`, `.googleapis.com`, `.azure.com`)
+  - Removes spec file suffixes (`_openapi`, `-openapi`, `_discovery`, `-discovery`)
+  - Removes version suffixes (`__v1`, `-v1`)
+  - Added `sanitize_name()` function to convert invalid characters to valid Rust identifiers
+  - Converts dots to underscores
+  - Cleans up consecutive underscores
+  - Strips leading/trailing underscores
+  - Fixes K8s service names: `apis__internal` → `apis_internal`
+
+- **Resource Name Sanitization** (#29)
+  - Enhanced `extract_resource_from_path()` in OpenAPI parser to strip domain suffixes
+  - Removes `.k8s.io`, `.googleapis.com`, `.apiserver`, `.azure.com` from resource names
+  - Fixes K8s resource names: `Storage.k8s.io` → `Storage`, `Internal.apiserver.k8s.io` → `Internal`
+  - All generated resource names are now valid Rust identifiers
+
+- **Unified README Formatting** (#29)
+  - Fixed CRUD operation formatting in `unified_README.md.tera`
+  - Added proper spacing before operation brackets
+  - Changed: `**ResourceName**[CRUD]` → `**ResourceName** [CRUD]`
+  - Only shows brackets when operations exist
+  - Improved readability of generated documentation
+
 ## [0.2.1] - 2025-10-29
 
 ### Fixed
