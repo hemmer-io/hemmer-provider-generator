@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2025-10-29
+
+### Fixed
+
+- **Snake Case Conversion** (#25, #26)
+  - Improved `to_snake_case` function in all parser converters (Smithy, OpenAPI, Discovery, Protobuf)
+  - Properly handles consecutive capitals (e.g., `HTTPServer` → `http_server` instead of `httpserver`)
+  - Cleans up multiple consecutive underscores (e.g., `__test__` → `test`)
+  - Strips leading and trailing underscores
+  - Handles hyphens and spaces by converting to underscores
+  - Fixes K8s resource naming showing `__api` and other formatting issues
+
+- **README Operations Formatting** (#25, #26)
+  - Fixed CRUD operation list items in both `README.md.tera` and `unified_README.md.tera`
+  - Operations now display on separate lines instead of running together
+  - Improved readability of generated provider documentation
+
+### Added
+
+- **Test Directory Filtering** (#26)
+  - Spec discovery now skips directories containing `__test__` in their name
+  - Prevents processing test fixtures during unified provider generation
+  - Reduces noise and improves generation speed for large SDK directories
+
+- **Graceful Parse Error Handling** (#26)
+  - Parse errors no longer fail the entire unified generation process
+  - Problematic specs are skipped with a warning message
+  - Generation continues with successfully parsed specs
+  - Displays count of skipped specs at the end of processing
+  - Enables successful generation even when some specs have issues (e.g., GCP identity service)
+
 ## [0.2.0] - 2025-10-29
 
 ### Added
