@@ -24,8 +24,8 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
         desired_input: &ResourceInput,
     ) -> Result<ResourcePlan> {
         match resource_name {
-{% for resource in service.resources %}            "{{ resource.name | sanitize_identifier }}" => {
-                self.plan_{{ resource.name | sanitize_identifier }}(current_state, desired_input).await
+{% for resource in service.resources %}            "{{ resource.name | sanitize_identifier_part }}" => {
+                self.plan_{{ resource.name | sanitize_identifier_part }}(current_state, desired_input).await
             }
 {% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
                 "Unknown resource type: {}.{}",
@@ -42,8 +42,8 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
         input: ResourceInput,
     ) -> Result<ResourceOutput> {
         match resource_name {
-{% for resource in service.resources %}            "{{ resource.name | sanitize_identifier }}" => {
-                self.create_{{ resource.name | sanitize_identifier }}(input).await
+{% for resource in service.resources %}            "{{ resource.name | sanitize_identifier_part }}" => {
+                self.create_{{ resource.name | sanitize_identifier_part }}(input).await
             }
 {% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
                 "Unknown resource type: {}.{}",
@@ -60,8 +60,8 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
         id: &str,
     ) -> Result<ResourceOutput> {
         match resource_name {
-{% for resource in service.resources %}            "{{ resource.name | sanitize_identifier }}" => {
-                self.read_{{ resource.name | sanitize_identifier }}(id).await
+{% for resource in service.resources %}            "{{ resource.name | sanitize_identifier_part }}" => {
+                self.read_{{ resource.name | sanitize_identifier_part }}(id).await
             }
 {% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
                 "Unknown resource type: {}.{}",
@@ -79,8 +79,8 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
         input: ResourceInput,
     ) -> Result<ResourceOutput> {
         match resource_name {
-{% for resource in service.resources %}            "{{ resource.name | sanitize_identifier }}" => {
-                self.update_{{ resource.name | sanitize_identifier }}(id, input).await
+{% for resource in service.resources %}            "{{ resource.name | sanitize_identifier_part }}" => {
+                self.update_{{ resource.name | sanitize_identifier_part }}(id, input).await
             }
 {% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
                 "Unknown resource type: {}.{}",
@@ -97,8 +97,8 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
         id: &str,
     ) -> Result<()> {
         match resource_name {
-{% for resource in service.resources %}            "{{ resource.name | sanitize_identifier }}" => {
-                self.delete_{{ resource.name | sanitize_identifier }}(id).await
+{% for resource in service.resources %}            "{{ resource.name | sanitize_identifier_part }}" => {
+                self.delete_{{ resource.name | sanitize_identifier_part }}(id).await
             }
 {% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
                 "Unknown resource type: {}.{}",
@@ -118,7 +118,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
     // ------------------------------------------------------------------------
 
     /// Plan changes to a {{ resource.name }} resource
-    async fn plan_{{ resource.name | sanitize_identifier }}(
+    async fn plan_{{ resource.name | sanitize_identifier_part }}(
         &self,
         current_state: Option<&ResourceOutput>,
         desired_input: &ResourceInput,
@@ -134,7 +134,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
     }
 
     /// Create a new {{ resource.name }} resource
-    async fn create_{{ resource.name | sanitize_identifier }}(
+    async fn create_{{ resource.name | sanitize_identifier_part }}(
         &self,
         input: ResourceInput,
     ) -> Result<ResourceOutput> {
@@ -166,7 +166,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
 {% endif %}    }
 
     /// Read a {{ resource.name }} resource
-    async fn read_{{ resource.name | sanitize_identifier }}(
+    async fn read_{{ resource.name | sanitize_identifier_part }}(
         &self,
         id: &str,
     ) -> Result<ResourceOutput> {
@@ -190,7 +190,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
 {% endif %}    }
 
     /// Update a {{ resource.name }} resource
-    async fn update_{{ resource.name | sanitize_identifier }}(
+    async fn update_{{ resource.name | sanitize_identifier_part }}(
         &self,
         id: &str,
         input: ResourceInput,
@@ -223,7 +223,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
 {% endif %}    }
 
     /// Delete a {{ resource.name }} resource
-    async fn delete_{{ resource.name | sanitize_identifier }}(
+    async fn delete_{{ resource.name | sanitize_identifier_part }}(
         &self,
         id: &str,
     ) -> Result<()> {
