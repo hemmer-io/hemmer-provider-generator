@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2025-11-01
+
+### Changed
+
+- **Dependency Updates** (#48)
+  - Updated prost ecosystem to resolve type compatibility issues
+  - `prost`: 0.13 → 0.14
+  - `prost-types`: 0.13 → 0.14
+  - `prost-reflect`: 0.14 → 0.16
+
+### Added
+
+- **Dependabot Configuration** (#41, #49)
+  - Configured automated weekly dependency updates for Cargo and GitHub Actions
+  - Added prost ecosystem grouping to bundle related dependencies together
+  - Prevents future version conflicts by updating prost packages synchronously
+  - Auto-assigns PRs to @hemmer-io/engineering team
+
 ## [0.3.0] - 2025-11-01
 
 ### Added
