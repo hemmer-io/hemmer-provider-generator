@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-11-01
+
+### Added
+
+- **ProviderExecutor Trait Implementation** (#32, #38)
+  - Generated providers now implement the complete `ProviderExecutor` trait from `hemmer-provider`
+  - Added `configure()`, `plan()`, `create()`, `read()`, `update()`, `delete()` methods
+  - Resource dispatcher routes operations based on "service.resource" format
+  - Added `create_provider()` FFI factory function for dynamic library loading
+  - Configured `crate-type = ["cdylib", "rlib"]` for dual binary/library compilation
+  - Generated providers are now fully functional with Hemmer CLI
+
+- **Service Module Code Generation** (#32, #38)
+  - New `unified_service.rs.tera` template for complete service modules
+  - Each service has dedicated CRUD dispatchers for all resources
+  - Individual resource methods with placeholder SDK implementations
+  - Proper async handling using provider's Tokio runtime via `block_on()`
+  - Complete error handling with `hemmer_core::HemmerError`
+
+- **Cross-Platform Binary Build Automation** (#34, #39)
+  - Automated GitHub Actions workflow for building release binaries
+  - Builds for 5 platforms: darwin-amd64, darwin-arm64, linux-amd64, linux-arm64, windows-amd64
+  - Cross-compilation setup for Linux ARM64 with proper toolchains
+  - Binary naming follows ProviderRegistry convention: `hemmer-provider-{name}-{platform}{ext}`
+  - Automatic SHA256 checksum generation in `checksums.txt`
+  - GitHub release creation with all artifacts (binaries, checksums, provider.k)
+  - Triggered automatically on version tags (v*)
+
+- **Enhanced Documentation** (#34, #39)
+  - Added Installation section to README with Hemmer CLI and manual instructions
+  - Added Building from Source section with cargo commands
+  - Added Creating a Release section with complete tag-push workflow
+  - Release assets documentation listing all generated files
+  - Contributing section with provider regeneration instructions
+
+- **Tokio Runtime Integration** (#33, #37)
+  - Added `runtime: tokio::runtime::Runtime` field to generated providers
+  - Changed `new()` from async to sync, using `runtime.block_on()` internally
+  - Wrapped AWS config loading and client initialization with `block_on()`
+  - Fixes critical issue where AWS SDK operations fail when loaded as dynamic libraries (cdylib)
+  - Runtime context now properly crosses FFI boundary
+
+- **Service Name Normalization** (#31, #36)
+  - Added `remove_date_suffix()` function to strip AWS SDK version dates
+  - Handles patterns: `_YYYY_MM_DD` and `-YYYY-MM-DD`
+  - Examples: `s3_2006_03_01` → `s3`, `ec2_2016_11_15` → `ec2`
+  - Cleaner generated code with consistent service names across AWS services
+
+### Fixed
+
+- **Auto-Tag Workflow** (#35)
+  - Updated `.github/workflows/auto-tag.yml` to use `AUTO_TAG_PAT` instead of `GITHUB_TOKEN`
+  - Fixes issue where tag creation didn't trigger release workflow
+  - GitHub workflows triggered by `GITHUB_TOKEN` don't trigger other workflows (security feature)
+  - Using PAT allows proper workflow chaining
+
+### Changed
+
+- **Dependencies**
+  - Added `hemmer-provider` and `hemmer-core` dependencies to generated providers
+  - Added `async-trait = "0.1"` for trait implementations
+  - All generated providers now have Hemmer runtime dependencies
+
 ## [0.2.2] - 2025-10-29
 
 ### Fixed

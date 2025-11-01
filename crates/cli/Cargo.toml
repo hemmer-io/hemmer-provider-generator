@@ -17,9 +17,9 @@ name = "hemmer-provider-generator"
 path = "src/main.rs"
 
 [dependencies]
-hemmer-provider-generator-common = { version = "0.2.2", path = "../common" }
-hemmer-provider-generator-parser = { version = "0.2.2", path = "../parser" }
-hemmer-provider-generator-generator = { version = "0.2.2", path = "../generator" }
+hemmer-provider-generator-common = { version = "0.3.0", path = "../common" }
+hemmer-provider-generator-parser = { version = "0.3.0", path = "../parser" }
+hemmer-provider-generator-generator = { version = "0.3.0", path = "../generator" }
 clap = { workspace = true }
 anyhow = { workspace = true }
 colored = { workspace = true }

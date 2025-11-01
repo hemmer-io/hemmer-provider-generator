@@ -697,4 +697,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
 
 ---
 
-**Last Updated**: 2025-10-29 (v0.2.2 - Name Sanitization and Formatting Fixes)
+**Last Updated**: 2025-11-01 (v0.3.0 - ProviderExecutor Integration and Release Automation)
