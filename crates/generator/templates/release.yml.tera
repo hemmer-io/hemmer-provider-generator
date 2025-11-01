@@ -1,0 +1,132 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build {% raw %}${{ matrix.platform }}{% endraw %}
+    runs-on: {% raw %}${{ matrix.os }}{% endraw %}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            platform: darwin-amd64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            platform: darwin-arm64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            platform: linux-amd64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            platform: linux-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows-amd64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: {% raw %}${{ matrix.target }}{% endraw %}
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: {% raw %}matrix.target == 'aarch64-unknown-linux-gnu'{% endraw %}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Configure cargo for cross-compilation (Linux ARM64)
+        if: {% raw %}matrix.target == 'aarch64-unknown-linux-gnu'{% endraw %}
+        run: |
+          mkdir -p ~/.cargo
+          cat >> ~/.cargo/config.toml << 'EOFCONFIG'
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          EOFCONFIG
+
+      - name: Build release binary
+        run: cargo build --release --target {% raw %}${{ matrix.target }}{% endraw %}
+
+      - name: Rename binary (Unix)
+        if: {% raw %}matrix.os != 'windows-latest'{% endraw %}
+        run: |
+          cd target/{% raw %}${{ matrix.target }}{% endraw %}/release
+          LIB_NAME=$(ls libhemmer_{{ provider_name }}_provider.* | head -n 1)
+          mv "$LIB_NAME" hemmer-provider-{{ provider_name }}-{% raw %}${{ matrix.platform }}{% endraw %}
+
+      - name: Rename binary (Windows)
+        if: {% raw %}matrix.os == 'windows-latest'{% endraw %}
+        shell: pwsh
+        run: |
+          cd target/{% raw %}${{ matrix.target }}{% endraw %}/release
+          $libName = Get-ChildItem -Filter "hemmer_{{ provider_name }}_provider.dll" | Select-Object -First 1
+          Move-Item $libName.FullName "hemmer-provider-{{ provider_name }}-{% raw %}${{ matrix.platform }}{% endraw %}.exe"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-{% raw %}${{ matrix.platform }}{% endraw %}
+          path: target/{% raw %}${{ matrix.target }}{% endraw %}/release/hemmer-provider-{{ provider_name }}-{% raw %}${{ matrix.platform }}{% endraw %}*
+          if-no-files-found: error
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Organize binaries
+        run: |
+          mkdir -p release
+          find artifacts -type f -name 'hemmer-provider-*' -exec mv {} release/ \;
+          ls -lah release/
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum hemmer-provider-* > checksums.txt
+          cat checksums.txt
+
+      - name: Copy provider manifest
+        run: |
+          cp provider.k release/
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION={% raw %}${GITHUB_REF#refs/tags/v}{% endraw %}
+          echo "version=$VERSION" >> {% raw %}$GITHUB_OUTPUT{% endraw %}
+          echo "Version: $VERSION"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: {% raw %}${{ secrets.GITHUB_TOKEN }}{% endraw %}

@@ -219,6 +219,7 @@ impl UnifiedProviderGenerator {
         self.generate_unified_cargo_toml(output_dir)?;
         self.generate_unified_lib_rs(&src_dir)?;
         self.generate_unified_readme(output_dir)?;
+        self.generate_release_workflow(output_dir)?;
 
         // Generate service modules
         for service in &self.provider_def.services {
@@ -369,6 +370,31 @@ impl UnifiedProviderGenerator {
         let output_path = output_dir.join("README.md");
         fs::write(output_path, rendered)
             .map_err(|e| GeneratorError::Generation(format!("Failed to write README.md: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Generate GitHub Actions release workflow
+    fn generate_release_workflow(&self, output_dir: &Path) -> Result<()> {
+        // Create .github/workflows directory
+        let workflows_dir = output_dir.join(".github").join("workflows");
+        fs::create_dir_all(&workflows_dir).map_err(|e| {
+            GeneratorError::Generation(format!(
+                "Failed to create .github/workflows directory: {}",
+                e
+            ))
+        })?;
+
+        let context = self.create_unified_context();
+        let rendered = self
+            .tera
+            .render("release.yml", &context)
+            .map_err(|e| GeneratorError::Generation(format!("Template error: {:?}", e)))?;
+
+        let output_path = workflows_dir.join("release.yml");
+        fs::write(output_path, rendered).map_err(|e| {
+            GeneratorError::Generation(format!("Failed to write release.yml: {}", e))
+        })?;
 
         Ok(())
     }

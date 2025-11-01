@@ -12,6 +12,41 @@ This provider includes **{{ services | length }} services** with a total of **{{
 {% endfor %}
 {% endfor %}
 
+## Installation
+
+### Using Hemmer CLI (Recommended)
+
+Install the provider using the Hemmer CLI:
+
+```bash
+hemmer provider install {{ provider_name }}
+```
+
+This will automatically download the correct pre-built binary for your platform from the latest GitHub release.
+
+### Manual Installation
+
+1. Download the appropriate binary for your platform from the [Releases](../../releases) page:
+   - **macOS (Intel)**: `hemmer-provider-{{ provider_name }}-darwin-amd64`
+   - **macOS (Apple Silicon)**: `hemmer-provider-{{ provider_name }}-darwin-arm64`
+   - **Linux (x86_64)**: `hemmer-provider-{{ provider_name }}-linux-amd64`
+   - **Linux (ARM64)**: `hemmer-provider-{{ provider_name }}-linux-arm64`
+   - **Windows (x86_64)**: `hemmer-provider-{{ provider_name }}-windows-amd64.exe`
+
+2. Verify the checksum (optional but recommended):
+   ```bash
+   sha256sum -c checksums.txt
+   ```
+
+3. Move the binary to your Hemmer providers directory:
+   ```bash
+   # macOS/Linux
+   mv hemmer-provider-{{ provider_name }}-* ~/.hemmer/providers/
+
+   # Windows
+   move hemmer-provider-{{ provider_name }}-*.exe %USERPROFILE%\.hemmer\providers\
+   ```
+
 ## Usage
 
 ```rust
@@ -56,6 +91,60 @@ async fn main() -> anyhow::Result<()> {
 {% endfor %}
 {% endfor %}
 
+## Building from Source
+
+If you prefer to build the provider from source:
+
+```bash
+# Clone the repository
+git clone https://github.com/YOUR_ORG/hemmer-provider-{{ provider_name }}.git
+cd hemmer-provider-{{ provider_name }}
+
+# Build the provider
+cargo build --release
+
+# The binary will be at: target/release/libhemmer_{{ provider_name }}_provider.{so,dylib,dll}
+```
+
+## Creating a Release
+
+This provider includes automated release workflows. To create a new release:
+
+1. **Update the version** in `Cargo.toml`:
+   ```toml
+   [package]
+   version = "0.2.0"  # Update this
+   ```
+
+2. **Commit your changes**:
+   ```bash
+   git add Cargo.toml
+   git commit -m "chore: Bump version to 0.2.0"
+   git push
+   ```
+
+3. **Create and push a tag**:
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+4. **Automated build process**:
+   - GitHub Actions will automatically build binaries for all platforms
+   - Checksums will be generated
+   - A GitHub release will be created with all artifacts
+
+5. **Release assets** will include:
+   - `hemmer-provider-{{ provider_name }}-darwin-amd64`
+   - `hemmer-provider-{{ provider_name }}-darwin-arm64`
+   - `hemmer-provider-{{ provider_name }}-linux-amd64`
+   - `hemmer-provider-{{ provider_name }}-linux-arm64`
+   - `hemmer-provider-{{ provider_name }}-windows-amd64.exe`
+   - `checksums.txt`
+   - `provider.k`
+
+The release workflow is defined in `.github/workflows/release.yml`.
+
 ## Generated Code
 
 This provider was automatically generated from SDK metadata using the Hemmer Provider Generator.
@@ -64,7 +153,17 @@ This provider was automatically generated from SDK metadata using the Hemmer Pro
 - **SDK**: {{ provider_name }} SDK v{{ sdk_version }}
 - **Services**: {{ services | length }}
 - **Total Resources**: {{ total_resources }}
-- **Generated**: {{ now() }}
+
+## Contributing
+
+To regenerate this provider with updated SDK specifications:
+
+```bash
+hemmer-provider-generator generate-unified \
+  --provider {{ provider_name }} \
+  --spec-dir /path/to/{{ provider_name }}-sdk \
+  --output .
+```
 
 ## License
 
