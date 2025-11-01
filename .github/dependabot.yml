@@ -17,6 +17,14 @@ updates:
     reviewers:
       - "hemmer-io/engineering"
     groups:
+      # Group prost ecosystem updates together (they must be updated in sync)
+      prost-ecosystem:
+        patterns:
+          - "prost*"
+        update-types:
+          - "major"
+          - "minor"
+          - "patch"
       # Group patch updates together
       minor-and-patch:
         patterns:
