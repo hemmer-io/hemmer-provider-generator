@@ -436,7 +436,7 @@ struct UnifiedConfig<'a> {
 }
 
 fn generate_unified_command(config: UnifiedConfig) -> Result<()> {
-    use hemmer_provider_generator_common::{Provider, ProviderDefinition};
+    use hemmer_provider_generator_common::{Provider, ProviderDefinition, ServiceDefinition};
 
     // Discover spec files
     let discovered_specs: Vec<PathBuf> = if let Some(dir) = config.spec_dir {
@@ -542,13 +542,23 @@ fn generate_unified_command(config: UnifiedConfig) -> Result<()> {
 
         match service_def_result {
             Ok(service_def) => {
-                println!(
-                    "{} Parsed {} resources from {}",
-                    "✓".green(),
-                    service_def.resources.len(),
-                    service_name.yellow()
-                );
-                services.push(service_def);
+                // Skip services with empty or whitespace-only names
+                if service_def.name.trim().is_empty() {
+                    eprintln!(
+                        "{} Skipping {}: empty service name",
+                        "⚠".yellow(),
+                        spec_path.display()
+                    );
+                    skipped += 1;
+                } else {
+                    println!(
+                        "{} Parsed {} resources from {}",
+                        "✓".green(),
+                        service_def.resources.len(),
+                        service_name.yellow()
+                    );
+                    services.push(service_def);
+                }
             }
             Err(e) => {
                 eprintln!("{} Skipping {}: {}", "⚠".yellow(), spec_path.display(), e);
@@ -565,12 +575,31 @@ fn generate_unified_command(config: UnifiedConfig) -> Result<()> {
         );
     }
 
+    // Deduplicate services by name, merging resources from duplicate services
+    let deduplicated_services = {
+        use std::collections::HashMap;
+
+        let mut service_map: HashMap<String, ServiceDefinition> = HashMap::new();
+
+        for service in services {
+            if let Some(existing) = service_map.get_mut(&service.name) {
+                // Merge resources from duplicate service
+                existing.resources.extend(service.resources);
+            } else {
+                // First service with this name
+                service_map.insert(service.name.clone(), service);
+            }
+        }
+
+        service_map.into_values().collect::<Vec<_>>()
+    };
+
     // Create unified provider definition
     let provider_def = ProviderDefinition {
         provider,
         provider_name: config.provider_name.to_string(),
         sdk_version: config.version.to_string(),
-        services,
+        services: deduplicated_services,
     };
 
     let total_resources: usize = provider_def
