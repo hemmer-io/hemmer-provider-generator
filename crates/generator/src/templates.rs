@@ -121,6 +121,11 @@ pub fn load_unified_templates() -> Result<Tera> {
         GeneratorError::Generation(format!("Failed to load unified_README.md template: {}", e))
     })?;
 
+    tera.add_raw_template("release.yml", include_str!("../templates/release.yml.tera"))
+        .map_err(|e| {
+            GeneratorError::Generation(format!("Failed to load release.yml template: {}", e))
+        })?;
+
     Ok(tera)
 }
 
