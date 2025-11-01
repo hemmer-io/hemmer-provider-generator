@@ -246,7 +246,10 @@ fn sdk_dependency_filter(value: &Value, args: &HashMap<String, Value>) -> tera::
 /// - Replaces special characters with underscores
 /// - Escapes Rust keywords with r# prefix
 /// - Handles digits at start
-fn sanitize_identifier_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
+fn sanitize_identifier_filter(
+    value: &Value,
+    _args: &HashMap<String, Value>,
+) -> tera::Result<Value> {
     use hemmer_provider_generator_common::sanitize_rust_identifier;
 
     let s = value

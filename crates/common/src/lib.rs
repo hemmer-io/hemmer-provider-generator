@@ -406,11 +406,10 @@ pub fn sanitize_rust_identifier(name: &str) -> String {
     // Escape Rust keywords with r# prefix
     const RUST_KEYWORDS: &[&str] = &[
         // Strict keywords (always reserved)
-        "as", "break", "const", "continue", "crate", "else", "enum", "extern", "false", "fn",
-        "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref",
-        "return", "self", "Self", "static", "struct", "super", "trait", "true", "type",
-        "unsafe", "use", "where", "while",
-        // Reserved keywords (reserved for future use)
+        "as", "break", "const", "continue", "crate", "else", "enum", "extern", "false", "fn", "for",
+        "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref", "return",
+        "self", "Self", "static", "struct", "super", "trait", "true", "type", "unsafe", "use",
+        "where", "while", // Reserved keywords (reserved for future use)
         "abstract", "become", "box", "do", "final", "macro", "override", "priv", "typeof",
         "unsized", "virtual", "yield",
         // Weak keywords (context-dependent, but safer to escape)
