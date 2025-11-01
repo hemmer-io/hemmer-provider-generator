@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2025-11-01
+
+### Fixed
+
+- **Generator Code Quality** (#51, #52)
+  - Fixed empty service names generating invalid Rust syntax (`pub mod ;`)
+  - Skip specs with empty/whitespace service names with clear warning
+  - Fixed duplicate dependencies in generated Cargo.toml
+  - Deduplicate services by name, merging resources from duplicate services
+  - Generic solution works for all providers (AWS, GCP, Azure, Kubernetes)
+
+### Added
+
+- **Template Filter System** (#52)
+  - New `sdk_dependency` Tera filter for generic SDK dependency generation
+  - Eliminates provider-specific conditional logic in templates
+  - Usage: `{{ provider | sdk_dependency(service_name=service.name) }}`
+  - Supports AWS (`aws-sdk-{service}`), GCP (`google-{service}`), Azure (`azure-{service}`)
+
+### Changed
+
+- **Service Deduplication** (#52)
+  - Services deduplicated in CLI before creating ProviderDefinition
+  - Resources merged when duplicate service names found
+  - Simplified generator and templates by removing duplicate logic
+  - Single source of truth for deduplication
+
 ## [0.3.1] - 2025-11-01
 
 ### Changed
