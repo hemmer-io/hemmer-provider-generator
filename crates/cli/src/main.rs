@@ -675,6 +675,10 @@ fn infer_service_name(path: &Path) -> Option<String> {
             .replace("_discovery", "")
             .replace("-discovery", "");
 
+        // Remove AWS SDK version date suffixes (e.g., _2006_03_01, -2016-11-15)
+        // Pattern: _YYYY_MM_DD or -YYYY-MM-DD
+        name = remove_date_suffix(&name);
+
         // Remove version suffixes like "-v1", "__v1"
         name = name.split("__v").next().unwrap_or(&name).to_string();
         name = name.split("-v").next().unwrap_or(&name).to_string();
@@ -685,6 +689,59 @@ fn infer_service_name(path: &Path) -> Option<String> {
         // Apply snake_case conversion to clean up __ and format properly
         sanitize_name(&name)
     })
+}
+
+/// Remove date suffix from service names (e.g., _2006_03_01, -2016-11-15)
+/// AWS SDK services often have version dates appended
+fn remove_date_suffix(s: &str) -> String {
+    // Regex patterns for date suffixes:
+    // _YYYY_MM_DD (e.g., s3_2006_03_01)
+    // -YYYY-MM-DD (e.g., s3-2016-11-15)
+    // Also handles multiple consecutive dates
+
+    let mut result = s.to_string();
+
+    // Pattern: _YYYY_MM_DD
+    loop {
+        let parts: Vec<&str> = result.rsplitn(4, '_').collect();
+        if parts.len() == 4 {
+            // Check if last 3 parts are YYYY, MM, DD (all numeric)
+            if parts[0].len() == 2
+                && parts[0].chars().all(|c| c.is_numeric())
+                && parts[1].len() == 2
+                && parts[1].chars().all(|c| c.is_numeric())
+                && parts[2].len() == 4
+                && parts[2].chars().all(|c| c.is_numeric())
+            {
+                // Remove the date suffix
+                result = parts[3].to_string();
+                continue;
+            }
+        }
+        break;
+    }
+
+    // Pattern: -YYYY-MM-DD
+    loop {
+        let parts: Vec<&str> = result.rsplitn(4, '-').collect();
+        if parts.len() == 4 {
+            // Check if last 3 parts are YYYY, MM, DD (all numeric)
+            if parts[0].len() == 2
+                && parts[0].chars().all(|c| c.is_numeric())
+                && parts[1].len() == 2
+                && parts[1].chars().all(|c| c.is_numeric())
+                && parts[2].len() == 4
+                && parts[2].chars().all(|c| c.is_numeric())
+            {
+                // Remove the date suffix
+                result = parts[3].to_string();
+                continue;
+            }
+        }
+        break;
+    }
+
+    result
 }
 
 /// Sanitize a name for use as Rust identifier (module/directory name)
