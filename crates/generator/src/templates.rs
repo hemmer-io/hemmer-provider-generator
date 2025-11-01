@@ -222,9 +222,7 @@ fn sdk_dependency_filter(value: &Value, args: &HashMap<String, Value>) -> tera::
     let service_name = args
         .get("service_name")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            tera::Error::msg("sdk_dependency filter requires service_name parameter")
-        })?;
+        .ok_or_else(|| tera::Error::msg("sdk_dependency filter requires service_name parameter"))?;
 
     let dependency = match provider {
         "Aws" => format!("aws-sdk-{}", service_name),
