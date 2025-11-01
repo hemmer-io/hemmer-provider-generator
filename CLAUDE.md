@@ -697,4 +697,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
 
 ---
 
-**Last Updated**: 2025-11-01 (v0.3.1 - Dependency Updates and Dependabot Configuration)
+**Last Updated**: 2025-11-01 (v0.3.2 - Bug Fixes for Invalid Generated Code)
