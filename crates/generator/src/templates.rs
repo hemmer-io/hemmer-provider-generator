@@ -60,6 +60,7 @@ pub fn load_unified_templates() -> Result<Tera> {
     tera.register_filter("rust_type", rust_type_filter);
     tera.register_filter("capitalize", capitalize_filter);
     tera.register_filter("lower", lower_filter);
+    tera.register_filter("sdk_dependency", sdk_dependency_filter);
 
     // Add unified templates
     tera.add_raw_template(
@@ -205,4 +206,37 @@ fn lower_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<V
         .ok_or_else(|| tera::Error::msg("lower filter expects a string"))?;
 
     Ok(Value::String(s.to_lowercase()))
+}
+
+/// Filter to generate SDK dependency name based on provider
+/// Usage: {{ provider | sdk_dependency(service_name=service.name) }}
+/// Examples:
+///   - Aws + "s3" -> "aws-sdk-s3"
+///   - Gcp + "storage" -> "google-storage"
+///   - Azure + "compute" -> "azure-compute"
+fn sdk_dependency_filter(value: &Value, args: &HashMap<String, Value>) -> tera::Result<Value> {
+    let provider = value
+        .as_str()
+        .ok_or_else(|| tera::Error::msg("sdk_dependency filter expects provider as a string"))?;
+
+    let service_name = args
+        .get("service_name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            tera::Error::msg("sdk_dependency filter requires service_name parameter")
+        })?;
+
+    let dependency = match provider {
+        "Aws" => format!("aws-sdk-{}", service_name),
+        "Gcp" => format!("google-{}", service_name),
+        "Azure" => format!("azure-{}", service_name),
+        _ => {
+            return Err(tera::Error::msg(format!(
+                "Unsupported provider for sdk_dependency: {}",
+                provider
+            )))
+        }
+    };
+
+    Ok(Value::String(dependency))
 }
