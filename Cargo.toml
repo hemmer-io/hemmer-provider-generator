@@ -35,7 +35,7 @@ anyhow = "1.0"
 thiserror = "2.0"
 
 # Terminal
-colored = "2.1"
+colored = "3.0"
 
 # Testing
 mockall = "0.13"
