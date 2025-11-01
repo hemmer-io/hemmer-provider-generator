@@ -157,7 +157,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
             // Return placeholder output
             Ok(ResourceOutput::new()
                 .with_id("placeholder-id")
-{% for field in resource.fields %}                .with_field("{{ field.name }}", {{ field.name }}.unwrap_or_default())
+{% for field in resource.fields %}                .with_field("{{ field.name }}", {{ field.name | sanitize_identifier }}.unwrap_or_default())
 {% endfor %}            )
         })
 {% else %}        // TODO: Implement {{ provider }} SDK calls
@@ -214,7 +214,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
             // Return placeholder output
             Ok(ResourceOutput::new()
                 .with_id(id)
-{% for field in resource.fields %}                .with_field("{{ field.name }}", {{ field.name }}.unwrap_or_default())
+{% for field in resource.fields %}                .with_field("{{ field.name }}", {{ field.name | sanitize_identifier }}.unwrap_or_default())
 {% endfor %}            )
         })
 {% else %}        // TODO: Implement {{ provider }} SDK calls
