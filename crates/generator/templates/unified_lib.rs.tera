@@ -33,26 +33,48 @@ pub type Result<T> = std::result::Result<T, ProviderError>;
 /// Unified provider client for {{ provider_name | capitalize }}
 pub struct {{ provider_name | capitalize }}Provider {
 {% if provider == "Aws" %}{% for service in services %}    {{ service.name }}_client: aws_sdk_{{ service.name }}::Client,
-{% endfor %}{% elif provider == "Gcp" %}    // GCP clients
+{% endfor %}    /// Tokio runtime for async operations
+    /// Each provider instance owns its own runtime to ensure async operations
+    /// work correctly when loaded as a dynamic library (cdylib)
+    runtime: tokio::runtime::Runtime,
+{% elif provider == "Gcp" %}    // GCP clients
 {% for service in services %}    // {{ service.name }}_client: google_{{ service.name }}::Client,
-{% endfor %}{% elif provider == "Azure" %}    // Azure clients
+{% endfor %}    runtime: tokio::runtime::Runtime,
+{% elif provider == "Azure" %}    // Azure clients
 {% for service in services %}    // {{ service.name }}_client: azure_{{ service.name }}::Client,
-{% endfor %}{% elif provider == "Kubernetes" %}    kube_client: kube::Client,
+{% endfor %}    runtime: tokio::runtime::Runtime,
+{% elif provider == "Kubernetes" %}    kube_client: kube::Client,
+    runtime: tokio::runtime::Runtime,
 {% endif %}
 }
 
 impl {{ provider_name | capitalize }}Provider {
     /// Create a new unified provider instance
-    pub async fn new() -> Result<Self> {
-{% if provider == "Aws" %}        let config = aws_config::load_from_env().await;
-{% for service in services %}        let {{ service.name }}_client = aws_sdk_{{ service.name }}::Client::new(&config);
-{% endfor %}{% elif provider == "Kubernetes" %}        let kube_client = kube::Client::try_default()
-            .await
-            .map_err(|e| ProviderError::SdkError(format!("Failed to create kube client: {}", e)))?;
-{% endif %}
-        Ok(Self {
+    pub fn new() -> Result<Self> {
+        // Create Tokio runtime for async operations
+        // This ensures async AWS SDK calls work when the provider is loaded as a dynamic library
+        let runtime = tokio::runtime::Runtime::new()
+            .map_err(|e| ProviderError::SdkError(format!("Failed to create Tokio runtime: {}", e)))?;
+
+{% if provider == "Aws" %}        // Load AWS config and initialize clients using the runtime
+        let (config{% for service in services %}, {{ service.name }}_client{% endfor %}) = runtime.block_on(async {
+            let config = aws_config::load_from_env().await;
+{% for service in services %}            let {{ service.name }}_client = aws_sdk_{{ service.name }}::Client::new(&config);
+{% endfor %}            (config{% for service in services %}, {{ service.name }}_client{% endfor %})
+        });
+
+{% elif provider == "Kubernetes" %}        // Initialize Kubernetes client using the runtime
+        let kube_client = runtime.block_on(async {
+            kube::Client::try_default()
+                .await
+                .map_err(|e| ProviderError::SdkError(format!("Failed to create kube client: {}", e)))
+        })?;
+
+{% endif %}        Ok(Self {
 {% if provider == "Aws" %}{% for service in services %}            {{ service.name }}_client,
-{% endfor %}{% elif provider == "Kubernetes" %}            kube_client,
+{% endfor %}            runtime,
+{% elif provider == "Kubernetes" %}            kube_client,
+            runtime,
 {% endif %}
         })
     }
@@ -68,9 +90,11 @@ impl {{ provider_name | capitalize }}Provider {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_provider_creation() {
+    #[test]
+    fn test_provider_creation() {
         // Provider creation test
         // Note: This will fail without proper credentials
+        // let provider = {{ provider_name | capitalize }}Provider::new();
+        // assert!(provider.is_ok());
     }
 }
