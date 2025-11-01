@@ -423,6 +423,82 @@ pub fn sanitize_rust_identifier(name: &str) -> String {
     }
 }
 
+/// Sanitize a string to be part of a composite Rust identifier
+///
+/// Unlike `sanitize_rust_identifier`, this function appends `_` to keywords
+/// instead of using the `r#` prefix, making it suitable for use in composite
+/// names like function names (`plan_type_` instead of invalid `plan_r#type`).
+///
+/// This function ensures the result can be safely used in:
+/// - Composite function names (e.g., `create_`, `plan_`, `read_`)
+/// - Parts of larger identifiers
+///
+/// ## Transformations
+///
+/// 1. Replaces special characters (`.`, `-`, `/`, etc.) with underscores
+/// 2. Prefixes with `_` if starts with a digit
+/// 3. Appends `_` suffix to Rust keywords (instead of `r#` prefix)
+///
+/// ## Examples
+///
+/// ```
+/// use hemmer_provider_generator_common::sanitize_identifier_part;
+///
+/// assert_eq!(sanitize_identifier_part("rbac.authorization"), "rbac_authorization");
+/// assert_eq!(sanitize_identifier_part("type"), "type_");  // Suffix instead of r#
+/// assert_eq!(sanitize_identifier_part("acm-pca"), "acm_pca");
+/// assert_eq!(sanitize_identifier_part("123invalid"), "_123invalid");
+/// assert_eq!(sanitize_identifier_part("normal_name"), "normal_name");
+/// ```
+pub fn sanitize_identifier_part(name: &str) -> String {
+    // Replace special characters with underscores
+    let sanitized: String = name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+
+    // Clean up consecutive underscores
+    let mut sanitized = sanitized;
+    while sanitized.contains("__") {
+        sanitized = sanitized.replace("__", "_");
+    }
+
+    // Remove leading/trailing underscores
+    let sanitized = sanitized.trim_matches('_');
+
+    // Ensure doesn't start with digit
+    let sanitized = if sanitized.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        format!("_{}", sanitized)
+    } else {
+        sanitized.to_string()
+    };
+
+    // Append _ to Rust keywords (instead of r# prefix for composite names)
+    const RUST_KEYWORDS: &[&str] = &[
+        // Strict keywords (always reserved)
+        "as", "break", "const", "continue", "crate", "else", "enum", "extern", "false", "fn", "for",
+        "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref", "return",
+        "self", "Self", "static", "struct", "super", "trait", "true", "type", "unsafe", "use",
+        "where", "while", // Reserved keywords (reserved for future use)
+        "abstract", "become", "box", "do", "final", "macro", "override", "priv", "typeof",
+        "unsized", "virtual", "yield",
+        // Weak keywords (context-dependent, but safer to escape)
+        "async", "await", "dyn", "try", "union",
+    ];
+
+    if RUST_KEYWORDS.contains(&sanitized.as_str()) {
+        format!("{}_", sanitized)
+    } else {
+        sanitized
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -635,5 +711,28 @@ mod tests {
         assert_eq!(sanitize_rust_identifier("..."), "");
         // Leading/trailing underscores removed
         assert_eq!(sanitize_rust_identifier("_test_"), "test");
+    }
+
+    #[test]
+    fn test_sanitize_identifier_part_dots() {
+        assert_eq!(
+            sanitize_identifier_part("rbac.authorization"),
+            "rbac_authorization"
+        );
+    }
+
+    #[test]
+    fn test_sanitize_identifier_part_keywords() {
+        // Keywords get _ suffix instead of r# prefix
+        assert_eq!(sanitize_identifier_part("type"), "type_");
+        assert_eq!(sanitize_identifier_part("async"), "async_");
+        assert_eq!(sanitize_identifier_part("await"), "await_");
+        assert_eq!(sanitize_identifier_part("match"), "match_");
+    }
+
+    #[test]
+    fn test_sanitize_identifier_part_unchanged() {
+        assert_eq!(sanitize_identifier_part("normal_name"), "normal_name");
+        assert_eq!(sanitize_identifier_part("ValidRustName"), "ValidRustName");
     }
 }

@@ -62,6 +62,7 @@ pub fn load_unified_templates() -> Result<Tera> {
     tera.register_filter("lower", lower_filter);
     tera.register_filter("sdk_dependency", sdk_dependency_filter);
     tera.register_filter("sanitize_identifier", sanitize_identifier_filter);
+    tera.register_filter("sanitize_identifier_part", sanitize_identifier_part_filter);
 
     // Add unified templates
     tera.add_raw_template(
@@ -241,11 +242,15 @@ fn sdk_dependency_filter(value: &Value, args: &HashMap<String, Value>) -> tera::
 }
 
 /// Filter to sanitize strings to valid Rust identifiers
-/// Usage: {{ resource.name | sanitize_identifier }}
+///
+/// Usage: {{ field.name | sanitize_identifier }}
+///
 /// Ensures the result is a valid Rust identifier:
 /// - Replaces special characters with underscores
-/// - Escapes Rust keywords with r# prefix
+/// - Escapes Rust keywords with r# prefix (for standalone identifiers)
 /// - Handles digits at start
+///
+/// Use for: variable names, standalone identifiers
 fn sanitize_identifier_filter(
     value: &Value,
     _args: &HashMap<String, Value>,
@@ -257,4 +262,27 @@ fn sanitize_identifier_filter(
         .ok_or_else(|| tera::Error::msg("sanitize_identifier filter expects a string"))?;
 
     Ok(Value::String(sanitize_rust_identifier(s)))
+}
+
+/// Filter to sanitize strings for use in composite identifiers
+///
+/// Usage: {{ resource.name | sanitize_identifier_part }}
+///
+/// Ensures the result can be part of a composite name:
+/// - Replaces special characters with underscores
+/// - Appends _ to Rust keywords (instead of r# prefix)
+/// - Handles digits at start
+///
+/// Use for: function name parts (plan_XXX, create_XXX, etc.)
+fn sanitize_identifier_part_filter(
+    value: &Value,
+    _args: &HashMap<String, Value>,
+) -> tera::Result<Value> {
+    use hemmer_provider_generator_common::sanitize_identifier_part;
+
+    let s = value
+        .as_str()
+        .ok_or_else(|| tera::Error::msg("sanitize_identifier_part filter expects a string"))?;
+
+    Ok(Value::String(sanitize_identifier_part(s)))
 }

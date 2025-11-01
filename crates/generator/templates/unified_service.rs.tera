@@ -25,7 +25,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
     ) -> Result<ResourcePlan> {
         match resource_name {
 {% for resource in service.resources %}            "{{ resource.name | sanitize_identifier }}" => {
-                self.plan_{{ resource.name | sanitize_identifier }}(current_state, desired_input).await
+                self.plan_{{ resource.name | sanitize_identifier_part }}(current_state, desired_input).await
             }
 {% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
                 "Unknown resource type: {}.{}",
@@ -43,7 +43,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
     ) -> Result<ResourceOutput> {
         match resource_name {
 {% for resource in service.resources %}            "{{ resource.name | sanitize_identifier }}" => {
-                self.create_{{ resource.name | sanitize_identifier }}(input).await
+                self.create_{{ resource.name | sanitize_identifier_part }}(input).await
             }
 {% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
                 "Unknown resource type: {}.{}",
@@ -61,7 +61,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
     ) -> Result<ResourceOutput> {
         match resource_name {
 {% for resource in service.resources %}            "{{ resource.name | sanitize_identifier }}" => {
-                self.read_{{ resource.name | sanitize_identifier }}(id).await
+                self.read_{{ resource.name | sanitize_identifier_part }}(id).await
             }
 {% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
                 "Unknown resource type: {}.{}",
@@ -80,7 +80,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
     ) -> Result<ResourceOutput> {
         match resource_name {
 {% for resource in service.resources %}            "{{ resource.name | sanitize_identifier }}" => {
-                self.update_{{ resource.name | sanitize_identifier }}(id, input).await
+                self.update_{{ resource.name | sanitize_identifier_part }}(id, input).await
             }
 {% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
                 "Unknown resource type: {}.{}",
@@ -98,7 +98,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
     ) -> Result<()> {
         match resource_name {
 {% for resource in service.resources %}            "{{ resource.name | sanitize_identifier }}" => {
-                self.delete_{{ resource.name | sanitize_identifier }}(id).await
+                self.delete_{{ resource.name | sanitize_identifier_part }}(id).await
             }
 {% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
                 "Unknown resource type: {}.{}",
@@ -118,7 +118,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
     // ------------------------------------------------------------------------
 
     /// Plan changes to a {{ resource.name }} resource
-    async fn plan_{{ resource.name | sanitize_identifier }}(
+    async fn plan_{{ resource.name | sanitize_identifier_part }}(
         &self,
         current_state: Option<&ResourceOutput>,
         desired_input: &ResourceInput,
@@ -134,7 +134,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
     }
 
     /// Create a new {{ resource.name }} resource
-    async fn create_{{ resource.name | sanitize_identifier }}(
+    async fn create_{{ resource.name | sanitize_identifier_part }}(
         &self,
         input: ResourceInput,
     ) -> Result<ResourceOutput> {
@@ -148,7 +148,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
             // TODO: Call AWS SDK to create the resource
             // Example:
             // let result = self.provider.{{ service.name }}_client
-            //     .create_{{ resource.name | sanitize_identifier }}()
+            //     .create_{{ resource.name | sanitize_identifier_part }}()
             //     .set_name(name)
             //     .send()
             //     .await
@@ -166,7 +166,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
 {% endif %}    }
 
     /// Read a {{ resource.name }} resource
-    async fn read_{{ resource.name | sanitize_identifier }}(
+    async fn read_{{ resource.name | sanitize_identifier_part }}(
         &self,
         id: &str,
     ) -> Result<ResourceOutput> {
@@ -190,7 +190,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
 {% endif %}    }
 
     /// Update a {{ resource.name }} resource
-    async fn update_{{ resource.name | sanitize_identifier }}(
+    async fn update_{{ resource.name | sanitize_identifier_part }}(
         &self,
         id: &str,
         input: ResourceInput,
@@ -204,7 +204,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
             // TODO: Call AWS SDK to update the resource
             // Example:
             // let result = self.provider.{{ service.name }}_client
-            //     .update_{{ resource.name | sanitize_identifier }}()
+            //     .update_{{ resource.name | sanitize_identifier_part }}()
             //     .set_id(id.to_string())
             //     .set_name(name)
             //     .send()
@@ -223,7 +223,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
 {% endif %}    }
 
     /// Delete a {{ resource.name }} resource
-    async fn delete_{{ resource.name | sanitize_identifier }}(
+    async fn delete_{{ resource.name | sanitize_identifier_part }}(
         &self,
         id: &str,
     ) -> Result<()> {
@@ -231,7 +231,7 @@ impl<'a> {{ service.name | capitalize }}Service<'a> {
             // TODO: Call AWS SDK to delete the resource
             // Example:
             // self.provider.{{ service.name }}_client
-            //     .delete_{{ resource.name | sanitize_identifier }}()
+            //     .delete_{{ resource.name | sanitize_identifier_part }}()
             //     .set_id(id.to_string())
             //     .send()
             //     .await
