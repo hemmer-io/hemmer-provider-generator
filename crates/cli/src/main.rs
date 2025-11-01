@@ -5,6 +5,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use colored::*;
+use hemmer_provider_generator_common::sanitize_rust_identifier;
 use hemmer_provider_generator_generator::{ProviderGenerator, UnifiedProviderGenerator};
 use hemmer_provider_generator_parser::{
     DiscoveryParser, OpenApiParser, ProtobufParser, SmithyParser,
@@ -716,7 +717,10 @@ fn infer_service_name(path: &Path) -> Option<String> {
         name = name.split('.').next().unwrap_or(&name).to_string();
 
         // Apply snake_case conversion to clean up __ and format properly
-        sanitize_name(&name)
+        let name = sanitize_name(&name);
+
+        // Apply Rust identifier sanitization (handles keywords, special chars)
+        sanitize_rust_identifier(&name)
     })
 }
 

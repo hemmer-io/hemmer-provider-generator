@@ -61,6 +61,7 @@ pub fn load_unified_templates() -> Result<Tera> {
     tera.register_filter("capitalize", capitalize_filter);
     tera.register_filter("lower", lower_filter);
     tera.register_filter("sdk_dependency", sdk_dependency_filter);
+    tera.register_filter("sanitize_identifier", sanitize_identifier_filter);
 
     // Add unified templates
     tera.add_raw_template(
@@ -237,4 +238,20 @@ fn sdk_dependency_filter(value: &Value, args: &HashMap<String, Value>) -> tera::
     };
 
     Ok(Value::String(dependency))
+}
+
+/// Filter to sanitize strings to valid Rust identifiers
+/// Usage: {{ resource.name | sanitize_identifier }}
+/// Ensures the result is a valid Rust identifier:
+/// - Replaces special characters with underscores
+/// - Escapes Rust keywords with r# prefix
+/// - Handles digits at start
+fn sanitize_identifier_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
+    use hemmer_provider_generator_common::sanitize_rust_identifier;
+
+    let s = value
+        .as_str()
+        .ok_or_else(|| tera::Error::msg("sanitize_identifier filter expects a string"))?;
+
+    Ok(Value::String(sanitize_rust_identifier(s)))
 }

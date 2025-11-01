@@ -349,6 +349,81 @@ impl Default for ParserRegistry {
     }
 }
 
+/// Sanitize a string to be a valid Rust identifier
+///
+/// This function ensures the result can be safely used as:
+/// - Function names
+/// - Variable names
+/// - Module names
+/// - Struct/enum names
+///
+/// ## Transformations
+///
+/// 1. Replaces special characters (`.`, `-`, `/`, etc.) with underscores
+/// 2. Prefixes with `_` if starts with a digit
+/// 3. Escapes Rust keywords with `r#` prefix
+///
+/// ## Examples
+///
+/// ```
+/// use hemmer_provider_generator_common::sanitize_rust_identifier;
+///
+/// assert_eq!(sanitize_rust_identifier("rbac.authorization"), "rbac_authorization");
+/// assert_eq!(sanitize_rust_identifier("type"), "r#type");
+/// assert_eq!(sanitize_rust_identifier("acm-pca"), "acm_pca");
+/// assert_eq!(sanitize_rust_identifier("123invalid"), "_123invalid");
+/// assert_eq!(sanitize_rust_identifier("normal_name"), "normal_name");
+/// ```
+pub fn sanitize_rust_identifier(name: &str) -> String {
+    // Replace special characters with underscores
+    let sanitized: String = name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+
+    // Clean up consecutive underscores
+    let mut sanitized = sanitized;
+    while sanitized.contains("__") {
+        sanitized = sanitized.replace("__", "_");
+    }
+
+    // Remove leading/trailing underscores
+    let sanitized = sanitized.trim_matches('_');
+
+    // Ensure doesn't start with digit
+    let sanitized = if sanitized.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        format!("_{}", sanitized)
+    } else {
+        sanitized.to_string()
+    };
+
+    // Escape Rust keywords with r# prefix
+    const RUST_KEYWORDS: &[&str] = &[
+        // Strict keywords (always reserved)
+        "as", "break", "const", "continue", "crate", "else", "enum", "extern", "false", "fn",
+        "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref",
+        "return", "self", "Self", "static", "struct", "super", "trait", "true", "type",
+        "unsafe", "use", "where", "while",
+        // Reserved keywords (reserved for future use)
+        "abstract", "become", "box", "do", "final", "macro", "override", "priv", "typeof",
+        "unsized", "virtual", "yield",
+        // Weak keywords (context-dependent, but safer to escape)
+        "async", "await", "dyn", "try", "union",
+    ];
+
+    if RUST_KEYWORDS.contains(&sanitized.as_str()) {
+        format!("r#{}", sanitized)
+    } else {
+        sanitized
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -497,5 +572,69 @@ mod tests {
     fn test_parser_registry_default() {
         let registry = ParserRegistry::default();
         assert_eq!(registry.list_providers().len(), 0);
+    }
+
+    #[test]
+    fn test_sanitize_rust_identifier_dots() {
+        assert_eq!(
+            sanitize_rust_identifier("rbac.authorization"),
+            "rbac_authorization"
+        );
+        assert_eq!(
+            sanitize_rust_identifier("apis.internal.k8s.io"),
+            "apis_internal_k8s_io"
+        );
+    }
+
+    #[test]
+    fn test_sanitize_rust_identifier_hyphens() {
+        assert_eq!(sanitize_rust_identifier("acm-pca"), "acm_pca");
+        assert_eq!(sanitize_rust_identifier("eks-fargate"), "eks_fargate");
+    }
+
+    #[test]
+    fn test_sanitize_rust_identifier_keywords() {
+        assert_eq!(sanitize_rust_identifier("type"), "r#type");
+        assert_eq!(sanitize_rust_identifier("async"), "r#async");
+        assert_eq!(sanitize_rust_identifier("await"), "r#await");
+        assert_eq!(sanitize_rust_identifier("match"), "r#match");
+        assert_eq!(sanitize_rust_identifier("self"), "r#self");
+        assert_eq!(sanitize_rust_identifier("Self"), "r#Self");
+    }
+
+    #[test]
+    fn test_sanitize_rust_identifier_starts_with_digit() {
+        assert_eq!(sanitize_rust_identifier("123invalid"), "_123invalid");
+        assert_eq!(sanitize_rust_identifier("2fa"), "_2fa");
+    }
+
+    #[test]
+    fn test_sanitize_rust_identifier_special_characters() {
+        assert_eq!(sanitize_rust_identifier("foo/bar"), "foo_bar");
+        assert_eq!(sanitize_rust_identifier("foo@bar"), "foo_bar");
+        assert_eq!(sanitize_rust_identifier("foo bar"), "foo_bar");
+    }
+
+    #[test]
+    fn test_sanitize_rust_identifier_consecutive_underscores() {
+        assert_eq!(sanitize_rust_identifier("foo__bar"), "foo_bar");
+        assert_eq!(sanitize_rust_identifier("a...b"), "a_b");
+    }
+
+    #[test]
+    fn test_sanitize_rust_identifier_unchanged() {
+        assert_eq!(sanitize_rust_identifier("normal_name"), "normal_name");
+        assert_eq!(sanitize_rust_identifier("ValidRustName"), "ValidRustName");
+        assert_eq!(sanitize_rust_identifier("name123"), "name123");
+    }
+
+    #[test]
+    fn test_sanitize_rust_identifier_edge_cases() {
+        // Empty string behavior
+        assert_eq!(sanitize_rust_identifier(""), "");
+        // Only special characters
+        assert_eq!(sanitize_rust_identifier("..."), "");
+        // Leading/trailing underscores removed
+        assert_eq!(sanitize_rust_identifier("_test_"), "test");
     }
 }
