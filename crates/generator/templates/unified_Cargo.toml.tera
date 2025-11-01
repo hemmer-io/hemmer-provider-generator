@@ -3,9 +3,14 @@ name = "hemmer-{{ provider_name }}-provider"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
-# Hemmer provider runtime (placeholder)
-# hemmer-runtime = "0.1"
+# Hemmer provider runtime
+hemmer-provider = { path = "../../hemmer/crates/hemmer-provider" }
+hemmer-core = { path = "../../hemmer/crates/hemmer-core" }
+async-trait = "0.1"
 
 # SDK dependencies for all services
 {% if provider == "Aws" %}{% for service in services %}aws-sdk-{{ service.name }} = "1"

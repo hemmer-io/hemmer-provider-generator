@@ -299,7 +299,7 @@ impl UnifiedProviderGenerator {
 
         let rendered = self
             .tera
-            .render("service_mod.rs", &context)
+            .render("unified_service.rs", &context)
             .map_err(|e| GeneratorError::Generation(format!("Template error: {}", e)))?;
 
         let output_path = service_dir.join("mod.rs");

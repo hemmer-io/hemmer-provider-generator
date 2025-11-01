@@ -9,6 +9,9 @@
 {% for service in services %}pub mod {{ service.name }};
 {% endfor %}
 
+use async_trait::async_trait;
+use hemmer_core::Result;
+use hemmer_provider::{ProviderConfig, ProviderExecutor, ResourceInput, ResourceOutput, ResourcePlan};
 use thiserror::Error;
 
 /// Provider error types
@@ -84,6 +87,165 @@ impl {{ provider_name | capitalize }}Provider {
         {{ service.name }}::{{ service.name | capitalize }}Service::new(self)
     }
 {% endfor %}
+
+    /// Get reference to the Tokio runtime for executing async operations
+    pub(crate) fn runtime(&self) -> &tokio::runtime::Runtime {
+        &self.runtime
+    }
+}
+
+/// Implement ProviderExecutor trait for Hemmer integration
+#[async_trait]
+impl ProviderExecutor for {{ provider_name | capitalize }}Provider {
+    /// Configure the provider with authentication and settings
+    async fn configure(&mut self, config: ProviderConfig) -> Result<()> {
+        // Configuration is already handled in new()
+        // Additional runtime configuration can be added here
+        Ok(())
+    }
+
+    /// Plan changes to a resource (diff current vs desired state)
+    async fn plan(
+        &self,
+        resource_type: &str,
+        current_state: Option<&ResourceOutput>,
+        desired_input: &ResourceInput,
+    ) -> Result<ResourcePlan> {
+        // Dispatch to appropriate service based on resource_type
+        // Format: "service_name.resource_name" (e.g., "s3.bucket")
+        let parts: Vec<&str> = resource_type.split('.').collect();
+        if parts.len() != 2 {
+            return Err(hemmer_core::HemmerError::Provider(format!(
+                "Invalid resource type format: {}. Expected 'service.resource'",
+                resource_type
+            )));
+        }
+
+        let service_name = parts[0];
+        let resource_name = parts[1];
+
+        match service_name {
+{% for service in services %}            "{{ service.name }}" => {
+                self.{{ service.name }}().plan_resource(resource_name, current_state, desired_input).await
+            }
+{% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
+                "Unknown service: {}",
+                service_name
+            ))),
+        }
+    }
+
+    /// Create a new resource
+    async fn create(&self, resource_type: &str, input: ResourceInput) -> Result<ResourceOutput> {
+        let parts: Vec<&str> = resource_type.split('.').collect();
+        if parts.len() != 2 {
+            return Err(hemmer_core::HemmerError::Provider(format!(
+                "Invalid resource type format: {}. Expected 'service.resource'",
+                resource_type
+            )));
+        }
+
+        let service_name = parts[0];
+        let resource_name = parts[1];
+
+        match service_name {
+{% for service in services %}            "{{ service.name }}" => {
+                self.{{ service.name }}().create_resource(resource_name, input).await
+            }
+{% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
+                "Unknown service: {}",
+                service_name
+            ))),
+        }
+    }
+
+    /// Read/refresh resource state
+    async fn read(&self, resource_type: &str, id: &str) -> Result<ResourceOutput> {
+        let parts: Vec<&str> = resource_type.split('.').collect();
+        if parts.len() != 2 {
+            return Err(hemmer_core::HemmerError::Provider(format!(
+                "Invalid resource type format: {}. Expected 'service.resource'",
+                resource_type
+            )));
+        }
+
+        let service_name = parts[0];
+        let resource_name = parts[1];
+
+        match service_name {
+{% for service in services %}            "{{ service.name }}" => {
+                self.{{ service.name }}().read_resource(resource_name, id).await
+            }
+{% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
+                "Unknown service: {}",
+                service_name
+            ))),
+        }
+    }
+
+    /// Update an existing resource
+    async fn update(
+        &self,
+        resource_type: &str,
+        id: &str,
+        input: ResourceInput,
+    ) -> Result<ResourceOutput> {
+        let parts: Vec<&str> = resource_type.split('.').collect();
+        if parts.len() != 2 {
+            return Err(hemmer_core::HemmerError::Provider(format!(
+                "Invalid resource type format: {}. Expected 'service.resource'",
+                resource_type
+            )));
+        }
+
+        let service_name = parts[0];
+        let resource_name = parts[1];
+
+        match service_name {
+{% for service in services %}            "{{ service.name }}" => {
+                self.{{ service.name }}().update_resource(resource_name, id, input).await
+            }
+{% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
+                "Unknown service: {}",
+                service_name
+            ))),
+        }
+    }
+
+    /// Delete a resource
+    async fn delete(&self, resource_type: &str, id: &str) -> Result<()> {
+        let parts: Vec<&str> = resource_type.split('.').collect();
+        if parts.len() != 2 {
+            return Err(hemmer_core::HemmerError::Provider(format!(
+                "Invalid resource type format: {}. Expected 'service.resource'",
+                resource_type
+            )));
+        }
+
+        let service_name = parts[0];
+        let resource_name = parts[1];
+
+        match service_name {
+{% for service in services %}            "{{ service.name }}" => {
+                self.{{ service.name }}().delete_resource(resource_name, id).await
+            }
+{% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
+                "Unknown service: {}",
+                service_name
+            ))),
+        }
+    }
+}
+
+/// Factory function to create a provider instance
+///
+/// This is the entry point called by Hemmer when loading the provider as a dynamic library.
+#[no_mangle]
+pub extern "C" fn create_provider() -> *mut dyn ProviderExecutor {
+    match {{ provider_name | capitalize }}Provider::new() {
+        Ok(provider) => Box::into_raw(Box::new(provider)) as *mut dyn ProviderExecutor,
+        Err(_) => std::ptr::null_mut(),
+    }
 }
 
 #[cfg(test)]
