@@ -1,0 +1,247 @@
+//! {{ service.name | capitalize }} service for {{ provider_name | capitalize }} provider
+//!
+//! This module handles all {{ service.name }} resources and their CRUD operations.
+
+use hemmer_core::Result;
+use hemmer_provider::{ResourceInput, ResourceOutput, ResourcePlan};
+
+/// {{ service.name | capitalize }} service handler
+pub struct {{ service.name | capitalize }}Service<'a> {
+    provider: &'a crate::{{ provider_name | capitalize }}Provider,
+}
+
+impl<'a> {{ service.name | capitalize }}Service<'a> {
+    /// Create a new service handler
+    pub fn new(provider: &'a crate::{{ provider_name | capitalize }}Provider) -> Self {
+        Self { provider }
+    }
+
+    /// Plan changes to a resource
+    pub async fn plan_resource(
+        &self,
+        resource_name: &str,
+        current_state: Option<&ResourceOutput>,
+        desired_input: &ResourceInput,
+    ) -> Result<ResourcePlan> {
+        match resource_name {
+{% for resource in service.resources %}            "{{ resource.name | lower }}" => {
+                self.plan_{{ resource.name | lower }}(current_state, desired_input).await
+            }
+{% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
+                "Unknown resource type: {}.{}",
+                "{{ service.name }}",
+                resource_name
+            ))),
+        }
+    }
+
+    /// Create a new resource
+    pub async fn create_resource(
+        &self,
+        resource_name: &str,
+        input: ResourceInput,
+    ) -> Result<ResourceOutput> {
+        match resource_name {
+{% for resource in service.resources %}            "{{ resource.name | lower }}" => {
+                self.create_{{ resource.name | lower }}(input).await
+            }
+{% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
+                "Unknown resource type: {}.{}",
+                "{{ service.name }}",
+                resource_name
+            ))),
+        }
+    }
+
+    /// Read resource state
+    pub async fn read_resource(
+        &self,
+        resource_name: &str,
+        id: &str,
+    ) -> Result<ResourceOutput> {
+        match resource_name {
+{% for resource in service.resources %}            "{{ resource.name | lower }}" => {
+                self.read_{{ resource.name | lower }}(id).await
+            }
+{% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
+                "Unknown resource type: {}.{}",
+                "{{ service.name }}",
+                resource_name
+            ))),
+        }
+    }
+
+    /// Update an existing resource
+    pub async fn update_resource(
+        &self,
+        resource_name: &str,
+        id: &str,
+        input: ResourceInput,
+    ) -> Result<ResourceOutput> {
+        match resource_name {
+{% for resource in service.resources %}            "{{ resource.name | lower }}" => {
+                self.update_{{ resource.name | lower }}(id, input).await
+            }
+{% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
+                "Unknown resource type: {}.{}",
+                "{{ service.name }}",
+                resource_name
+            ))),
+        }
+    }
+
+    /// Delete a resource
+    pub async fn delete_resource(
+        &self,
+        resource_name: &str,
+        id: &str,
+    ) -> Result<()> {
+        match resource_name {
+{% for resource in service.resources %}            "{{ resource.name | lower }}" => {
+                self.delete_{{ resource.name | lower }}(id).await
+            }
+{% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
+                "Unknown resource type: {}.{}",
+                "{{ service.name }}",
+                resource_name
+            ))),
+        }
+    }
+
+    // ========================================================================
+    // Resource-specific CRUD implementations
+    // ========================================================================
+
+{% for resource in service.resources %}
+    // ------------------------------------------------------------------------
+    // {{ resource.name | capitalize }} resource operations
+    // ------------------------------------------------------------------------
+
+    /// Plan changes to a {{ resource.name }} resource
+    async fn plan_{{ resource.name | lower }}(
+        &self,
+        current_state: Option<&ResourceOutput>,
+        desired_input: &ResourceInput,
+    ) -> Result<ResourcePlan> {
+        // If no current state exists, this is a create operation
+        if current_state.is_none() {
+            return Ok(ResourcePlan::create());
+        }
+
+        // TODO: Implement proper diff logic
+        // For now, return NoOp if resource exists
+        Ok(ResourcePlan::no_op())
+    }
+
+    /// Create a new {{ resource.name }} resource
+    async fn create_{{ resource.name | lower }}(
+        &self,
+        input: ResourceInput,
+    ) -> Result<ResourceOutput> {
+{% if provider == "Aws" %}        // Use the runtime to execute async SDK calls
+        self.provider.runtime().block_on(async {
+            // Extract input fields
+{% for field in resource.fields %}{% if field.required %}            let {{ field.name }} = input.get_string("{{ field.name }}")?;
+{% else %}            let {{ field.name }} = input.get_optional_string("{{ field.name }}")?;
+{% endif %}{% endfor %}
+
+            // TODO: Call AWS SDK to create the resource
+            // Example:
+            // let result = self.provider.{{ service.name }}_client
+            //     .create_{{ resource.name | lower }}()
+            //     .set_name(name)
+            //     .send()
+            //     .await
+            //     .map_err(|e| hemmer_core::HemmerError::Provider(format!("Failed to create resource: {}", e)))?;
+
+            // Return placeholder output
+            Ok(ResourceOutput::new()
+                .with_id("placeholder-id")
+{% for field in resource.fields %}                .with_field("{{ field.name }}", {{ field.name }}.unwrap_or_default())
+{% endfor %}            )
+        })
+{% else %}        // TODO: Implement {{ provider }} SDK calls
+        Ok(ResourceOutput::new()
+            .with_id("placeholder-id"))
+{% endif %}    }
+
+    /// Read a {{ resource.name }} resource
+    async fn read_{{ resource.name | lower }}(
+        &self,
+        id: &str,
+    ) -> Result<ResourceOutput> {
+{% if provider == "Aws" %}        self.provider.runtime().block_on(async {
+            // TODO: Call AWS SDK to read the resource
+            // Example:
+            // let result = self.provider.{{ service.name }}_client
+            //     .describe_{{ resource.name | lower }}()
+            //     .set_id(id.to_string())
+            //     .send()
+            //     .await
+            //     .map_err(|e| hemmer_core::HemmerError::Provider(format!("Failed to read resource: {}", e)))?;
+
+            // Return placeholder output
+            Ok(ResourceOutput::new()
+                .with_id(id))
+        })
+{% else %}        // TODO: Implement {{ provider }} SDK calls
+        Ok(ResourceOutput::new()
+            .with_id(id))
+{% endif %}    }
+
+    /// Update a {{ resource.name }} resource
+    async fn update_{{ resource.name | lower }}(
+        &self,
+        id: &str,
+        input: ResourceInput,
+    ) -> Result<ResourceOutput> {
+{% if provider == "Aws" %}        self.provider.runtime().block_on(async {
+            // Extract input fields
+{% for field in resource.fields %}{% if field.required %}            let {{ field.name }} = input.get_string("{{ field.name }}")?;
+{% else %}            let {{ field.name }} = input.get_optional_string("{{ field.name }}")?;
+{% endif %}{% endfor %}
+
+            // TODO: Call AWS SDK to update the resource
+            // Example:
+            // let result = self.provider.{{ service.name }}_client
+            //     .update_{{ resource.name | lower }}()
+            //     .set_id(id.to_string())
+            //     .set_name(name)
+            //     .send()
+            //     .await
+            //     .map_err(|e| hemmer_core::HemmerError::Provider(format!("Failed to update resource: {}", e)))?;
+
+            // Return placeholder output
+            Ok(ResourceOutput::new()
+                .with_id(id)
+{% for field in resource.fields %}                .with_field("{{ field.name }}", {{ field.name }}.unwrap_or_default())
+{% endfor %}            )
+        })
+{% else %}        // TODO: Implement {{ provider }} SDK calls
+        Ok(ResourceOutput::new()
+            .with_id(id))
+{% endif %}    }
+
+    /// Delete a {{ resource.name }} resource
+    async fn delete_{{ resource.name | lower }}(
+        &self,
+        id: &str,
+    ) -> Result<()> {
+{% if provider == "Aws" %}        self.provider.runtime().block_on(async {
+            // TODO: Call AWS SDK to delete the resource
+            // Example:
+            // self.provider.{{ service.name }}_client
+            //     .delete_{{ resource.name | lower }}()
+            //     .set_id(id.to_string())
+            //     .send()
+            //     .await
+            //     .map_err(|e| hemmer_core::HemmerError::Provider(format!("Failed to delete resource: {}", e)))?;
+
+            Ok(())
+        })
+{% else %}        // TODO: Implement {{ provider }} SDK calls
+        Ok(())
+{% endif %}    }
+
+{% endfor %}
+}

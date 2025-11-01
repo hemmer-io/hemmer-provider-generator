@@ -59,6 +59,7 @@ pub fn load_unified_templates() -> Result<Tera> {
     tera.register_filter("kcl_type", kcl_type_filter);
     tera.register_filter("rust_type", rust_type_filter);
     tera.register_filter("capitalize", capitalize_filter);
+    tera.register_filter("lower", lower_filter);
 
     // Add unified templates
     tera.add_raw_template(
@@ -86,11 +87,11 @@ pub fn load_unified_templates() -> Result<Tera> {
     })?;
 
     tera.add_raw_template(
-        "service_mod.rs",
-        include_str!("../templates/service_mod.rs.tera"),
+        "unified_service.rs",
+        include_str!("../templates/unified_service.rs.tera"),
     )
     .map_err(|e| {
-        GeneratorError::Generation(format!("Failed to load service_mod.rs template: {}", e))
+        GeneratorError::Generation(format!("Failed to load unified_service.rs template: {}", e))
     })?;
 
     tera.add_raw_template(
@@ -190,4 +191,13 @@ fn capitalize_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Res
     let rest: String = chars.collect();
 
     Ok(Value::String(format!("{}{}", first, rest)))
+}
+
+/// Filter to convert string to lowercase
+fn lower_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
+    let s = value
+        .as_str()
+        .ok_or_else(|| tera::Error::msg("lower filter expects a string"))?;
+
+    Ok(Value::String(s.to_lowercase()))
 }
