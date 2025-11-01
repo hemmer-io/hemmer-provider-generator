@@ -423,6 +423,87 @@ pub fn sanitize_rust_identifier(name: &str) -> String {
     }
 }
 
+/// Sanitize a string to be a valid Rust identifier part (for composite names)
+///
+/// This function is similar to `sanitize_rust_identifier`, but handles keywords
+/// differently for use in composite identifiers like function names.
+///
+/// For keywords, it appends an underscore suffix instead of using the r# prefix,
+/// since r# only works for complete identifiers, not parts of composite names.
+///
+/// # Examples
+///
+/// ```
+/// use hemmer_provider_generator_common::sanitize_identifier_part;
+///
+/// // Dots become underscores
+/// assert_eq!(sanitize_identifier_part("rbac.authorization"), "rbac_authorization");
+///
+/// // Keywords get underscore suffix (not r# prefix)
+/// assert_eq!(sanitize_identifier_part("type"), "type_");
+///
+/// // Valid names are unchanged
+/// assert_eq!(sanitize_identifier_part("bucket"), "bucket");
+/// ```
+///
+/// # Transformations
+///
+/// 1. Replaces special characters (dots, hyphens, etc.) with underscores
+/// 2. Collapses consecutive underscores to single underscores
+/// 3. Removes leading/trailing underscores
+/// 4. Prefixes with underscore if starts with digit
+/// 5. Appends underscore suffix to Rust keywords
+///
+/// Use for: function name parts, composite identifiers
+pub fn sanitize_identifier_part(name: &str) -> String {
+    // Replace special characters with underscores
+    let sanitized: String = name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+
+    // Clean up consecutive underscores
+    let mut sanitized = sanitized;
+    while sanitized.contains("__") {
+        sanitized = sanitized.replace("__", "_");
+    }
+
+    // Remove leading/trailing underscores
+    let sanitized = sanitized.trim_matches('_');
+
+    // Ensure doesn't start with digit
+    let sanitized = if sanitized.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        format!("_{}", sanitized)
+    } else {
+        sanitized.to_string()
+    };
+
+    // For composite identifiers, append underscore to keywords instead of r# prefix
+    const RUST_KEYWORDS: &[&str] = &[
+        // Strict keywords (always reserved)
+        "as", "break", "const", "continue", "crate", "else", "enum", "extern", "false", "fn", "for",
+        "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref", "return",
+        "self", "Self", "static", "struct", "super", "trait", "true", "type", "unsafe", "use",
+        "where", "while", // Reserved keywords (reserved for future use)
+        "abstract", "become", "box", "do", "final", "macro", "override", "priv", "typeof",
+        "unsized", "virtual", "yield",
+        // Weak keywords (context-dependent, but safer to escape)
+        "async", "await", "dyn", "try", "union",
+    ];
+
+    if RUST_KEYWORDS.contains(&sanitized.as_str()) {
+        format!("{}_", sanitized)
+    } else {
+        sanitized
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -635,5 +716,53 @@ mod tests {
         assert_eq!(sanitize_rust_identifier("..."), "");
         // Leading/trailing underscores removed
         assert_eq!(sanitize_rust_identifier("_test_"), "test");
+    }
+
+    #[test]
+    fn test_sanitize_identifier_part_dots() {
+        // Kubernetes resources with dots
+        assert_eq!(
+            sanitize_identifier_part("rbac.authorization"),
+            "rbac_authorization"
+        );
+        assert_eq!(sanitize_identifier_part("apps.v1"), "apps_v1");
+    }
+
+    #[test]
+    fn test_sanitize_identifier_part_keywords() {
+        // Keywords get underscore suffix for composite names
+        assert_eq!(sanitize_identifier_part("type"), "type_");
+        assert_eq!(sanitize_identifier_part("mod"), "mod_");
+        assert_eq!(sanitize_identifier_part("async"), "async_");
+        // r# prefix would be invalid in function names like plan_type()
+        // Must use suffix: plan_type_()
+    }
+
+    #[test]
+    fn test_sanitize_identifier_part_valid_names() {
+        // Valid names are unchanged
+        assert_eq!(sanitize_identifier_part("bucket"), "bucket");
+        assert_eq!(sanitize_identifier_part("deployment"), "deployment");
+        assert_eq!(sanitize_identifier_part("managedkafka"), "managedkafka");
+    }
+
+    #[test]
+    fn test_sanitize_identifier_part_special_characters() {
+        // Special chars become underscores
+        assert_eq!(sanitize_identifier_part("test-name"), "test_name");
+        assert_eq!(sanitize_identifier_part("test.name"), "test_name");
+        assert_eq!(sanitize_identifier_part("test::name"), "test_name");
+    }
+
+    #[test]
+    fn test_sanitize_identifier_part_edge_cases() {
+        // Empty string
+        assert_eq!(sanitize_identifier_part(""), "");
+        // Only special chars
+        assert_eq!(sanitize_identifier_part("..."), "");
+        // Leading/trailing underscores removed
+        assert_eq!(sanitize_identifier_part("_test_"), "test");
+        // Starts with digit
+        assert_eq!(sanitize_identifier_part("2fa"), "_2fa");
     }
 }

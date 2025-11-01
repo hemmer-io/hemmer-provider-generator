@@ -62,6 +62,7 @@ pub fn load_unified_templates() -> Result<Tera> {
     tera.register_filter("lower", lower_filter);
     tera.register_filter("sdk_dependency", sdk_dependency_filter);
     tera.register_filter("sanitize_identifier", sanitize_identifier_filter);
+    tera.register_filter("sanitize_identifier_part", sanitize_identifier_part_filter);
 
     // Add unified templates
     tera.add_raw_template(
@@ -246,6 +247,8 @@ fn sdk_dependency_filter(value: &Value, args: &HashMap<String, Value>) -> tera::
 /// - Replaces special characters with underscores
 /// - Escapes Rust keywords with r# prefix
 /// - Handles digits at start
+///
+/// Use for standalone identifiers (variable names, etc.)
 fn sanitize_identifier_filter(
     value: &Value,
     _args: &HashMap<String, Value>,
@@ -257,4 +260,28 @@ fn sanitize_identifier_filter(
         .ok_or_else(|| tera::Error::msg("sanitize_identifier filter expects a string"))?;
 
     Ok(Value::String(sanitize_rust_identifier(s)))
+}
+
+/// Filter to sanitize strings for use in composite identifiers (function names)
+/// Usage: {{ resource.name | sanitize_identifier_part }}
+/// Similar to sanitize_identifier, but handles keywords differently:
+/// - Replaces special characters with underscores
+/// - Appends underscore suffix to keywords (not r# prefix)
+/// - Handles digits at start
+///
+/// The r# prefix only works for complete identifiers, not parts of composite names.
+/// For example: `plan_r#type()` is invalid, but `plan_type_()` is valid.
+///
+/// Use for composite identifiers (function name parts)
+fn sanitize_identifier_part_filter(
+    value: &Value,
+    _args: &HashMap<String, Value>,
+) -> tera::Result<Value> {
+    use hemmer_provider_generator_common::sanitize_identifier_part;
+
+    let s = value
+        .as_str()
+        .ok_or_else(|| tera::Error::msg("sanitize_identifier_part filter expects a string"))?;
+
+    Ok(Value::String(sanitize_identifier_part(s)))
 }
