@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2025-11-02
+
+### Fixed
+
+- **Identifier Sanitization** (#55, #56, #57, #58, #59, #60)
+  - **#56**: Comprehensive identifier sanitization for valid Rust code
+    - Added `sanitize_rust_identifier()` function to escape Rust keywords with r# prefix
+    - Sanitize service names with special characters (dots, hyphens) to underscores
+    - Handle identifiers starting with digits by prefixing with underscore
+    - Applied sanitization to service names, resource names, and field names
+  - **#58**: Fixed r# prefix in composite identifiers (function names)
+    - Created `sanitize_identifier_part()` function for composite names
+    - Uses underscore suffix for keywords instead of r# prefix
+    - Example: `plan_type_()` instead of invalid `plan_r#type()`
+    - Applied to all function names in generated code
+  - **#60**: Fixed field variable references using raw names
+    - Applied `sanitize_identifier` filter to field variable references
+    - Fixed AWS schemas service compilation error with `type` keyword
+    - Ensures variable references match sanitized variable declarations
+    - Example: `let r#type = ...` now correctly referenced as `r#type.unwrap_or_default()`
+
+### Impact
+
+These fixes ensure all generated code compiles successfully for:
+- **AWS Provider**: Fixed schemas service and any service with keyword field names
+- **GCP Provider**: Fixed managedkafka service with `type` field
+- **K8s Provider**: Fixed resources with dots in names (e.g., `rbac.authorization`)
+- **All Providers**: Handle all Rust keywords (`type`, `match`, `impl`, `async`, etc.)
+
 ## [0.3.2] - 2025-11-01
 
 ### Fixed
