@@ -220,6 +220,7 @@ impl UnifiedProviderGenerator {
         self.generate_unified_lib_rs(&src_dir)?;
         self.generate_unified_readme(output_dir)?;
         self.generate_release_workflow(output_dir)?;
+        self.generate_docs(output_dir)?;
 
         // Generate service modules
         for service in &self.provider_def.services {
@@ -394,6 +395,87 @@ impl UnifiedProviderGenerator {
         let output_path = workflows_dir.join("release.yml");
         fs::write(output_path, rendered).map_err(|e| {
             GeneratorError::Generation(format!("Failed to write release.yml: {}", e))
+        })?;
+
+        Ok(())
+    }
+
+    /// Generate documentation in docs/ directory
+    fn generate_docs(&self, output_dir: &Path) -> Result<()> {
+        // Create docs directory structure
+        let docs_dir = output_dir.join("docs");
+        fs::create_dir_all(&docs_dir).map_err(|e| {
+            GeneratorError::Generation(format!("Failed to create docs directory: {}", e))
+        })?;
+
+        let services_docs_dir = docs_dir.join("services");
+        fs::create_dir_all(&services_docs_dir).map_err(|e| {
+            GeneratorError::Generation(format!("Failed to create docs/services directory: {}", e))
+        })?;
+
+        // Generate installation.md
+        self.generate_installation_docs(&docs_dir)?;
+
+        // Generate getting-started.md
+        self.generate_getting_started_docs(&docs_dir)?;
+
+        // Generate service-specific docs
+        for service in &self.provider_def.services {
+            self.generate_service_docs(&services_docs_dir, service)?;
+        }
+
+        Ok(())
+    }
+
+    /// Generate docs/installation.md
+    fn generate_installation_docs(&self, docs_dir: &Path) -> Result<()> {
+        let context = self.create_unified_context();
+        let rendered = self
+            .tera
+            .render("docs_installation.md", &context)
+            .map_err(|e| GeneratorError::Generation(format!("Template error: {:?}", e)))?;
+
+        let output_path = docs_dir.join("installation.md");
+        fs::write(output_path, rendered).map_err(|e| {
+            GeneratorError::Generation(format!("Failed to write installation.md: {}", e))
+        })?;
+
+        Ok(())
+    }
+
+    /// Generate docs/getting-started.md
+    fn generate_getting_started_docs(&self, docs_dir: &Path) -> Result<()> {
+        let context = self.create_unified_context();
+        let rendered = self
+            .tera
+            .render("docs_getting_started.md", &context)
+            .map_err(|e| GeneratorError::Generation(format!("Template error: {:?}", e)))?;
+
+        let output_path = docs_dir.join("getting-started.md");
+        fs::write(output_path, rendered).map_err(|e| {
+            GeneratorError::Generation(format!("Failed to write getting-started.md: {}", e))
+        })?;
+
+        Ok(())
+    }
+
+    /// Generate docs/services/{service}.md
+    fn generate_service_docs(
+        &self,
+        services_docs_dir: &Path,
+        service: &ServiceDefinition,
+    ) -> Result<()> {
+        let mut context = self.create_unified_context();
+        context.insert("service", service);
+
+        let rendered = self
+            .tera
+            .render("docs_service.md", &context)
+            .map_err(|e| GeneratorError::Generation(format!("Template error: {:?}", e)))?;
+
+        let output_path = services_docs_dir.join(format!("{}.md", service.name));
+        fs::write(output_path, rendered).map_err(|e| {
+            GeneratorError::Generation(format!("Failed to write {}.md: {}", service.name, e))
         })?;
 
         Ok(())

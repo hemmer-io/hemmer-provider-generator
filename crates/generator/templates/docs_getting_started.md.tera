@@ -1,0 +1,247 @@
+# Getting Started
+
+This guide will help you get started using the {{ provider_name | capitalize }} provider for Hemmer.
+
+---
+
+## Prerequisites
+
+- Hemmer CLI installed
+- {{ provider_name | capitalize }} provider installed ([Installation Guide](installation.md))
+- {% if provider_name == "aws" -%}
+AWS credentials configured (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+{%- elif provider_name == "gcp" -%}
+GCP credentials configured (GOOGLE_APPLICATION_CREDENTIALS)
+{%- elif provider_name == "azure" -%}
+Azure credentials configured (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID)
+{%- elif provider_name == "kubernetes" -%}
+Kubernetes config file (~/.kube/config) or cluster access
+{%- else -%}
+Provider credentials configured
+{%- endif %}
+
+---
+
+## Basic Usage
+
+### 1. Initialize Provider
+
+Create a new Rust project and add the provider dependency:
+
+```bash
+cargo new my-{{ provider_name }}-app
+cd my-{{ provider_name }}-app
+```
+
+Add to `Cargo.toml`:
+
+```toml
+[dependencies]
+hemmer-{{ provider_name }}-provider = "*"
+hemmer-core = "*"
+tokio = { version = "1", features = ["full"] }
+anyhow = "1.0"
+```
+
+### 2. Basic Example
+
+```rust
+use hemmer_{{ provider_name }}_provider::{{ provider_name | capitalize }}Provider;
+use anyhow::Result;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Create provider instance
+    let provider = {{ provider_name | capitalize }}Provider::new().await?;
+{% if services | length > 0 %}
+    // Access a service
+    let {{ services[0].name }}_service = provider.{{ services[0].name }}();
+
+{% if services[0].resources | length > 0 %}    // Work with resources
+    let {{ services[0].resources[0].name }} = {{ services[0].name }}_service.{{ services[0].resources[0].name }}();
+
+    // TODO: Use the resource
+{% endif %}{% endif %}
+    Ok(())
+}
+```
+
+---
+
+## Common Patterns
+
+### Error Handling
+
+```rust
+use anyhow::{Context, Result};
+
+async fn create_resource() -> Result<()> {
+    let provider = {{ provider_name | capitalize }}Provider::new()
+        .await
+        .context("Failed to initialize {{ provider_name }} provider")?;
+
+    // Your code here
+
+    Ok(())
+}
+```
+
+### Async Operations
+
+All provider operations are async and require a Tokio runtime:
+
+```rust
+#[tokio::main]
+async fn main() -> Result<()> {
+    let provider = {{ provider_name | capitalize }}Provider::new().await?;
+
+    // Run multiple operations concurrently
+    let results = tokio::join!(
+        operation1(&provider),
+        operation2(&provider),
+    );
+
+    Ok(())
+}
+```
+
+---
+
+## Available Services
+
+This provider includes {{ services | length }} services:
+
+{% for service in services -%}
+### {{ loop.index }}. {{ service.name | capitalize }}
+
+**Resources**: {{ service.resources | length }}
+
+{% for resource in service.resources -%}
+- {{ resource.name | capitalize }}{% if resource.operations.create %} [C{% endif %}{% if resource.operations.read %}R{% endif %}{% if resource.operations.update %}U{% endif %}{% if resource.operations.delete %}D]{% endif %}
+{% endfor %}
+📖 [Full {{ service.name }} documentation](services/{{ service.name }}.md)
+
+{% endfor %}
+---
+
+## Example: Complete Workflow
+
+Here's a complete example showing a typical workflow:
+
+```rust
+use hemmer_{{ provider_name }}_provider::{{ provider_name | capitalize }}Provider;
+use anyhow::Result;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Initialize provider
+    let provider = {{ provider_name | capitalize }}Provider::new().await?;
+
+{% if services | length > 0 %}    // Access service
+    let {{ services[0].name }}_service = provider.{{ services[0].name }}();
+
+{% if services[0].resources | length > 0 %}{% set resource = services[0].resources[0] %}    // Get resource
+    let {{ resource.name }} = {{ services[0].name }}_service.{{ resource.name }}();
+
+{% if resource.operations.create %}    // Create resource
+    println!("Creating {{ resource.name }}...");
+    // TODO: Add create logic
+{% endif %}
+{% if resource.operations.read %}    // Read resource
+    println!("Reading {{ resource.name }}...");
+    // TODO: Add read logic
+{% endif %}
+{% if resource.operations.update %}    // Update resource
+    println!("Updating {{ resource.name }}...");
+    // TODO: Add update logic
+{% endif %}
+{% if resource.operations.delete %}    // Delete resource
+    println!("Deleting {{ resource.name }}...");
+    // TODO: Add delete logic
+{% endif %}{% endif %}{% endif %}
+    Ok(())
+}
+```
+
+---
+
+## Configuration
+
+### Environment Variables
+
+{% if provider_name == "aws" -%}
+Configure AWS credentials using environment variables:
+
+```bash
+export AWS_ACCESS_KEY_ID=your_access_key
+export AWS_SECRET_ACCESS_KEY=your_secret_key
+export AWS_REGION=us-east-1  # Optional, defaults to us-east-1
+```
+{%- elif provider_name == "gcp" -%}
+Configure GCP credentials using a service account:
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
+export GCP_PROJECT=your-project-id
+```
+{%- elif provider_name == "azure" -%}
+Configure Azure credentials:
+
+```bash
+export AZURE_CLIENT_ID=your_client_id
+export AZURE_CLIENT_SECRET=your_client_secret
+export AZURE_TENANT_ID=your_tenant_id
+export AZURE_SUBSCRIPTION_ID=your_subscription_id
+```
+{%- elif provider_name == "kubernetes" -%}
+The provider uses your kubeconfig file by default:
+
+```bash
+export KUBECONFIG=~/.kube/config
+```
+
+Or configure inline:
+
+```bash
+export KUBE_HOST=https://kubernetes.example.com
+export KUBE_TOKEN=your_service_account_token
+```
+{%- else -%}
+Configure provider credentials as needed for your environment.
+{%- endif %}
+
+### Programmatic Configuration
+
+```rust
+use hemmer_{{ provider_name }}_provider::{{ provider_name | capitalize }}Provider;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Provider will use environment variables by default
+    let provider = {{ provider_name | capitalize }}Provider::new().await?;
+
+    // Or configure programmatically (if supported)
+    // let config = ProviderConfig::new()
+    //     .with_region("us-west-2")
+    //     .with_credentials(...);
+    // let provider = {{ provider_name | capitalize }}Provider::with_config(config).await?;
+
+    Ok(())
+}
+```
+
+---
+
+## Next Steps
+
+- 📚 [Service Documentation](services/) - Detailed docs for each service
+- 📖 [Installation Guide](installation.md) - Installation options
+- ⬅️ [Back to README](../README.md)
+
+---
+
+## Need Help?
+
+- 📖 Check service-specific documentation in `docs/services/`
+- 🐛 [Report issues](https://github.com/YOUR_ORG/hemmer-provider-{{ provider_name }}/issues)
+- 💬 [Join discussions](https://github.com/YOUR_ORG/hemmer-provider-{{ provider_name }}/discussions)

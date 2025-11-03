@@ -1,0 +1,128 @@
+# {{ service.name | capitalize }} Service
+
+{{ service.description | default(value="") }}
+
+**Resources**: {{ service.resources | length }}
+
+---
+
+## Overview
+
+The {{ service.name }} service provides access to {{ service.resources | length }} resource type{% if service.resources | length != 1 %}s{% endif %}:
+
+{% for resource in service.resources -%}
+- [{{ resource.name | capitalize }}](#{{ resource.name }}){% if resource.operations.create or resource.operations.read or resource.operations.update or resource.operations.delete %} [{% if resource.operations.create %}C{% endif %}{% if resource.operations.read %}R{% endif %}{% if resource.operations.update %}U{% endif %}{% if resource.operations.delete %}D{% endif %}]{% endif %}
+{% endfor %}
+---
+
+## Resources
+
+{% for resource in service.resources %}
+### {{ resource.name | capitalize }}
+
+{{ resource.description | default(value="") }}
+
+**Operations**:
+{%- if resource.operations.create %} ✅ Create{% endif %}
+{%- if resource.operations.read %} ✅ Read{% endif %}
+{%- if resource.operations.update %} ✅ Update{% endif %}
+{%- if resource.operations.delete %} ✅ Delete{% endif %}
+
+#### Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+{% for field in resource.fields -%}
+| `{{ field.name }}` | {{ field.field_type | rust_type }} | {% if field.required %}✅{% else %}{% endif %} | {{ field.description | default(value="") }} |
+{% endfor %}
+{% if resource.outputs | length > 0 %}
+#### Outputs
+
+| Output | Type | Description |
+|--------|------|-------------|
+{% for output in resource.outputs -%}
+| `{{ output.name }}` | {{ output.field_type | rust_type }} | {{ output.description | default(value="") }} |
+{% endfor %}{% endif %}
+
+#### Usage Example
+
+```rust
+use hemmer_{{ provider_name }}_provider::{{ provider_name | capitalize }}Provider;
+use anyhow::Result;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let provider = {{ provider_name | capitalize }}Provider::new().await?;
+    let {{ service.name }}_service = provider.{{ service.name }}();
+    let {{ resource.name }} = {{ service.name }}_service.{{ resource.name | sanitize_identifier_part }}();
+
+{% if resource.operations.create %}    // Create {{ resource.name }}
+    println!("Creating {{ resource.name }}...");
+    // TODO: Implement create logic with required fields:
+{% for field in resource.fields %}{% if field.required %}    //   - {{ field.name }}: {{ field.field_type | rust_type }}
+{% endif %}{% endfor %}{% endif %}
+{% if resource.operations.read %}    // Read {{ resource.name }}
+    println!("Reading {{ resource.name }}...");
+    // TODO: Implement read logic
+{% endif %}
+{% if resource.operations.update %}    // Update {{ resource.name }}
+    println!("Updating {{ resource.name }}...");
+    // TODO: Implement update logic
+{% endif %}
+{% if resource.operations.delete %}    // Delete {{ resource.name }}
+    println!("Deleting {{ resource.name }}...");
+    // TODO: Implement delete logic
+{% endif %}
+    Ok(())
+}
+```
+
+---
+
+{% endfor %}
+
+## Common Operations
+
+### Accessing the Service
+
+```rust
+use hemmer_{{ provider_name }}_provider::{{ provider_name | capitalize }}Provider;
+
+let provider = {{ provider_name | capitalize }}Provider::new().await?;
+let {{ service.name }}_service = provider.{{ service.name }}();
+```
+
+### Error Handling
+
+```rust
+use anyhow::{Context, Result};
+
+async fn use_{{ service.name }}_service() -> Result<()> {
+    let provider = {{ provider_name | capitalize }}Provider::new()
+        .await
+        .context("Failed to initialize provider")?;
+
+    let {{ service.name }}_service = provider.{{ service.name }}();
+
+    // Your operations here
+
+    Ok(())
+}
+```
+
+---
+
+## Related Documentation
+
+{% if provider_name == "aws" -%}
+- [AWS {{ service.name | capitalize }} Documentation](https://docs.aws.amazon.com/{{ service.name }}/)
+{%- elif provider_name == "gcp" -%}
+- [GCP {{ service.name | capitalize }} Documentation](https://cloud.google.com/{{ service.name }}/docs)
+{%- elif provider_name == "azure" -%}
+- [Azure {{ service.name | capitalize }} Documentation](https://docs.microsoft.com/en-us/azure/{{ service.name }}/)
+{%- elif provider_name == "kubernetes" -%}
+- [Kubernetes {{ service.name | capitalize }} Documentation](https://kubernetes.io/docs/reference/kubernetes-api/)
+{%- endif %}
+- [Getting Started Guide](../getting-started.md)
+- [Installation Guide](../installation.md)
+- ⬅️ [Back to README](../../README.md)
