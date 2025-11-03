@@ -271,9 +271,13 @@ fn sdk_dependency_filter(value: &Value, args: &HashMap<String, Value>) -> tera::
                 "pinpointsms" => "pinpointsmsvoice",
 
                 // Services that don't exist or have 0.0.0 versions (return empty to skip)
-                "chimesdk" | "lexmodelbuildingservice" | "lexruntimeservice"
-                | "databasemigrationservice" | "elasticsearchservice"
-                | "resourcegroupstaggingapi" | "marketplaceentitlementservice" => {
+                "chimesdk"
+                | "lexmodelbuildingservice"
+                | "lexruntimeservice"
+                | "databasemigrationservice"
+                | "elasticsearchservice"
+                | "resourcegroupstaggingapi"
+                | "marketplaceentitlementservice" => {
                     return Ok(Value::String(String::new()));
                 }
 
