@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5] - 2025-11-03
+
+### Fixed
+
+- **AWS SDK Dependencies** (#67, #68)
+  - **#68**: Normalized AWS SDK dependency names to match actual crate names on crates.io
+    - Remove underscores from all AWS service names (e.g., `acm_pca` → `acmpca`, `route_53` → `route53`)
+    - Applied 5 special case mappings for non-standard crate names:
+      - `apigatewaymanagementapi` → `apigatewaymanagement` (remove extra "api" suffix)
+      - `configservice` → `config` (remove "service" suffix)
+      - `costandusagereportservice` → `costandusagereport` (remove "service" suffix)
+      - `lexmodels` → `lexmodelsv2` (add "v2" suffix)
+      - `pinpointsms` → `pinpointsmsvoice` (add "voice" suffix)
+    - Excluded 7 non-existent services (don't generate dependencies):
+      - `chimesdk`, `lexmodelbuildingservice`, `lexruntimeservice`, `databasemigrationservice`
+      - `elasticsearchservice`, `resourcegroupstaggingapi`, `marketplaceentitlementservice`
+    - Updated `unified_Cargo.toml.tera` to skip empty dependency names
+
+### Impact
+
+Generated AWS providers now build successfully with correct SDK dependencies:
+- **393 services** analyzed
+- **386 valid dependencies** generated (98.2% success rate)
+- **7 invalid services** excluded
+- **5 services** with special name mappings
+- All dependencies verified to exist on crates.io with stable versions (v1.0+)
+
 ## [0.3.4] - 2025-11-03
 
 ### Fixed
