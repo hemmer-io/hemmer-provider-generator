@@ -17,8 +17,11 @@ async-trait = "0.1"
 kube = { version = "0.87", features = ["runtime", "derive"] }
 k8s-openapi = { version = "0.20", features = ["v1_28"] }
 {% else %}# Cloud provider SDK dependencies
-{% for service in services %}{{ provider | sdk_dependency(service_name=service.name) }} = "1"
-{% endfor %}{% if provider == "Aws" %}aws-config = "1"
+{% for service in services -%}
+{%- set dep = provider | sdk_dependency(service_name=service.name) -%}
+{%- if dep != "" %}{{ dep }} = "1"
+{% endif -%}
+{%- endfor %}{% if provider == "Aws" %}aws-config = "1"
 {% endif %}{% endif %}
 
 # Standard dependencies

@@ -245,6 +245,8 @@ fn lower_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<V
 /// Usage: {{ provider | sdk_dependency(service_name=service.name) }}
 /// Examples:
 ///   - Aws + "s3" -> "aws-sdk-s3"
+///   - Aws + "acm_pca" -> "aws-sdk-acmpca" (underscores removed)
+///   - Aws + "configservice" -> "aws-sdk-config" (special mapping)
 ///   - Gcp + "storage" -> "google-storage"
 ///   - Azure + "compute" -> "azure-compute"
 fn sdk_dependency_filter(value: &Value, args: &HashMap<String, Value>) -> tera::Result<Value> {
@@ -258,7 +260,34 @@ fn sdk_dependency_filter(value: &Value, args: &HashMap<String, Value>) -> tera::
         .ok_or_else(|| tera::Error::msg("sdk_dependency filter requires service_name parameter"))?;
 
     let dependency = match provider {
-        "Aws" => format!("aws-sdk-{}", service_name),
+        "Aws" => {
+            // Special case mappings for AWS services that don't follow the standard pattern
+            let normalized = match service_name {
+                // Services that need renaming (5 total)
+                "apigatewaymanagementapi" => "apigatewaymanagement",
+                "configservice" => "config",
+                "costandusagereportservice" => "costandusagereport",
+                "lexmodels" => "lexmodelsv2",
+                "pinpointsms" => "pinpointsmsvoice",
+
+                // Services that don't exist or have 0.0.0 versions (return empty to skip)
+                "chimesdk"
+                | "lexmodelbuildingservice"
+                | "lexruntimeservice"
+                | "databasemigrationservice"
+                | "elasticsearchservice"
+                | "resourcegroupstaggingapi"
+                | "marketplaceentitlementservice" => {
+                    return Ok(Value::String(String::new()));
+                }
+
+                // Default: remove underscores from service name
+                _ => service_name,
+            };
+
+            // Remove underscores for all AWS SDK crates
+            format!("aws-sdk-{}", normalized.replace("_", ""))
+        }
         "Gcp" => format!("google-{}", service_name),
         "Azure" => format!("azure-{}", service_name),
         _ => {
