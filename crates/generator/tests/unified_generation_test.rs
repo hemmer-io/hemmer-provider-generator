@@ -143,6 +143,14 @@ fn test_generate_unified_aws_provider() {
     assert!(output_dir.join("README.md").exists());
     assert!(output_dir.join("src/lib.rs").exists());
 
+    // Verify docs directory and files exist
+    assert!(output_dir.join("docs").exists());
+    assert!(output_dir.join("docs/installation.md").exists());
+    assert!(output_dir.join("docs/getting-started.md").exists());
+    assert!(output_dir.join("docs/services").exists());
+    assert!(output_dir.join("docs/services/s3.md").exists());
+    assert!(output_dir.join("docs/services/dynamodb.md").exists());
+
     // Verify service directories exist
     assert!(output_dir.join("src/s3/mod.rs").exists());
     assert!(output_dir.join("src/s3/resources/mod.rs").exists());

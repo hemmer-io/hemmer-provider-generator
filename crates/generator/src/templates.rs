@@ -129,6 +129,37 @@ pub fn load_unified_templates() -> Result<Tera> {
             GeneratorError::Generation(format!("Failed to load release.yml template: {}", e))
         })?;
 
+    // Add docs templates
+    tera.add_raw_template(
+        "docs_installation.md",
+        include_str!("../templates/docs_installation.md.tera"),
+    )
+    .map_err(|e| {
+        GeneratorError::Generation(format!(
+            "Failed to load docs_installation.md template: {}",
+            e
+        ))
+    })?;
+
+    tera.add_raw_template(
+        "docs_getting_started.md",
+        include_str!("../templates/docs_getting_started.md.tera"),
+    )
+    .map_err(|e| {
+        GeneratorError::Generation(format!(
+            "Failed to load docs_getting_started.md template: {}",
+            e
+        ))
+    })?;
+
+    tera.add_raw_template(
+        "docs_service.md",
+        include_str!("../templates/docs_service.md.tera"),
+    )
+    .map_err(|e| {
+        GeneratorError::Generation(format!("Failed to load docs_service.md template: {}", e))
+    })?;
+
     Ok(tera)
 }
 
