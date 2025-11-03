@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2025-11-03
+
+### Fixed
+
+- **Documentation Templates** (#64, #65)
+  - **#65**: Replaced Rust examples with KCL syntax in generated documentation
+    - Fixed `docs_getting_started.md.tera` to show KCL configuration examples instead of Rust async/await code
+    - Fixed `docs_service.md.tera` to use KCL resource creation patterns
+    - Removed Rust-specific sections (error handling, async operations, tokio runtime)
+    - Fixed CRUD bracket display to properly show `[CRUD]` indicators with closing brackets
+    - Fixed template syntax: replaced unsupported Python-style ternary expressions with proper Tera `{% if %}...{% else %}...{% endif %}` blocks
+    - Documentation now correctly targets Hemmer/KCL users instead of Rust developers
+
+### Impact
+
+Generated provider documentation now shows the correct user-facing language (KCL) instead of exposing internal Rust implementation details. This affects:
+- **Getting Started Guide**: Now shows KCL provider initialization and resource creation
+- **Service Documentation**: All examples use KCL syntax
+- **User Experience**: Documentation is now accessible to Hemmer users without Rust knowledge
+
 ## [0.3.3] - 2025-11-02
 
 ### Fixed
