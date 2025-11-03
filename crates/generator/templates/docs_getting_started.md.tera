@@ -45,64 +45,66 @@ anyhow = "1.0"
 
 ### 2. Basic Example
 
-```rust
-use hemmer_{{ provider_name }}_provider::{{ provider_name | capitalize }}Provider;
-use anyhow::Result;
+```kcl
+# main.k
+import {{ provider_name }}
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    // Create provider instance
-    let provider = {{ provider_name | capitalize }}Provider::new().await?;
-{% if services | length > 0 %}
-    // Access a service
-    let {{ services[0].name }}_service = provider.{{ services[0].name }}();
-
-{% if services[0].resources | length > 0 %}    // Work with resources
-    let {{ services[0].resources[0].name }} = {{ services[0].name }}_service.{{ services[0].resources[0].name }}();
-
-    // TODO: Use the resource
-{% endif %}{% endif %}
-    Ok(())
+# Create provider instance
+provider = {{ provider_name }}.{{ provider_name | capitalize }}Provider {
+{% if provider_name == "aws" %}    region = "us-east-1"
+{%- elif provider_name == "gcp" %}    project = "my-project-id"
+{%- elif provider_name == "azure" %}    subscription_id = "my-subscription-id"
+{%- elif provider_name == "kubernetes" %}    kubeconfig = "~/.kube/config"
+{%- endif %}
 }
+{% if services | length > 0 and services[0].resources | length > 0 %}
+# Create a {{ services[0].resources[0].name }}
+{{ services[0].resources[0].name }} = provider.{{ services[0].name }}.{{ services[0].resources[0].name | capitalize }} {
+{%- for field in services[0].resources[0].fields %}
+{%- if field.required %}
+    {{ field.name }} = "value"
+{%- endif %}
+{%- endfor %}
+}
+{% endif %}
 ```
 
 ---
 
 ## Common Patterns
 
-### Error Handling
+### Conditional Resource Creation
 
-```rust
-use anyhow::{Context, Result};
-
-async fn create_resource() -> Result<()> {
-    let provider = {{ provider_name | capitalize }}Provider::new()
-        .await
-        .context("Failed to initialize {{ provider_name }} provider")?;
-
-    // Your code here
-
-    Ok(())
-}
+```kcl
+# Only create resource if condition is met
+if environment == "production":
+{%- if services | length > 0 and services[0].resources | length > 0 %}
+    {{ services[0].resources[0].name }} = provider.{{ services[0].name }}.{{ services[0].resources[0].name | capitalize }} {
+{%- else %}
+    resource = provider.service.Resource {
+{%- endif %}
+        # configuration
+    }
 ```
 
-### Async Operations
+### Referencing Resource Outputs
 
-All provider operations are async and require a Tokio runtime:
-
-```rust
-#[tokio::main]
-async fn main() -> Result<()> {
-    let provider = {{ provider_name | capitalize }}Provider::new().await?;
-
-    // Run multiple operations concurrently
-    let results = tokio::join!(
-        operation1(&provider),
-        operation2(&provider),
-    );
-
-    Ok(())
+```kcl
+# Create a resource
+{%- if services | length > 0 and services[0].resources | length > 0 %}
+{{ services[0].resources[0].name }} = provider.{{ services[0].name }}.{{ services[0].resources[0].name | capitalize }} {
+{%- else %}
+bucket = provider.s3.Bucket {
+{%- endif %}
+    # configuration
 }
+
+# Reference its outputs
+{%- if services | length > 0 and services[0].resources | length > 0 %}
+output_value = {{ services[0].resources[0].name }}.id
+{%- else %}
+output_value = bucket.id
+{%- endif %}
 ```
 
 ---
@@ -117,7 +119,7 @@ This provider includes {{ services | length }} services:
 **Resources**: {{ service.resources | length }}
 
 {% for resource in service.resources -%}
-- {{ resource.name | capitalize }}{% if resource.operations.create %} [C{% endif %}{% if resource.operations.read %}R{% endif %}{% if resource.operations.update %}U{% endif %}{% if resource.operations.delete %}D]{% endif %}
+- {{ resource.name | capitalize }}{% if resource.operations.create or resource.operations.read or resource.operations.update or resource.operations.delete %} [{% if resource.operations.create %}C{% endif %}{% if resource.operations.read %}R{% endif %}{% if resource.operations.update %}U{% endif %}{% if resource.operations.delete %}D{% endif %}]{% endif %}
 {% endfor %}
 📖 [Full {{ service.name }} documentation](services/{{ service.name }}.md)
 
@@ -128,39 +130,40 @@ This provider includes {{ services | length }} services:
 
 Here's a complete example showing a typical workflow:
 
-```rust
-use hemmer_{{ provider_name }}_provider::{{ provider_name | capitalize }}Provider;
-use anyhow::Result;
+```kcl
+# main.k
+import {{ provider_name }}
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    // Initialize provider
-    let provider = {{ provider_name | capitalize }}Provider::new().await?;
-
-{% if services | length > 0 %}    // Access service
-    let {{ services[0].name }}_service = provider.{{ services[0].name }}();
-
-{% if services[0].resources | length > 0 %}{% set resource = services[0].resources[0] %}    // Get resource
-    let {{ resource.name }} = {{ services[0].name }}_service.{{ resource.name }}();
-
-{% if resource.operations.create %}    // Create resource
-    println!("Creating {{ resource.name }}...");
-    // TODO: Add create logic
-{% endif %}
-{% if resource.operations.read %}    // Read resource
-    println!("Reading {{ resource.name }}...");
-    // TODO: Add read logic
-{% endif %}
-{% if resource.operations.update %}    // Update resource
-    println!("Updating {{ resource.name }}...");
-    // TODO: Add update logic
-{% endif %}
-{% if resource.operations.delete %}    // Delete resource
-    println!("Deleting {{ resource.name }}...");
-    // TODO: Add delete logic
-{% endif %}{% endif %}{% endif %}
-    Ok(())
+# Initialize provider
+provider = {{ provider_name }}.{{ provider_name | capitalize }}Provider {
+{% if provider_name == "aws" %}    region = "us-east-1"
+{%- elif provider_name == "gcp" %}    project = "my-project-id"
+    region = "us-central1"
+{%- elif provider_name == "azure" %}    subscription_id = "my-subscription-id"
+    resource_group = "my-resource-group"
+{%- elif provider_name == "kubernetes" %}    kubeconfig = "~/.kube/config"
+    context = "my-cluster"
+{%- endif %}
 }
+{% if services | length > 0 and services[0].resources | length > 0 %}
+{%- set resource = services[0].resources[0] %}
+# Create {{ resource.name }}
+{{ resource.name }} = provider.{{ services[0].name }}.{{ resource.name | capitalize }} {
+{%- for field in resource.fields %}
+{%- if field.required %}
+    {{ field.name }} = "example-value"
+{%- endif %}
+{%- endfor %}
+}
+
+# Use resource outputs
+{{ resource.name }}_id = {{ resource.name }}.id
+{%- if resource.outputs | length > 0 %}
+{%- for output in resource.outputs %}
+{{ resource.name }}_{{ output.name }} = {{ resource.name }}.{{ output.name }}
+{%- endfor %}
+{%- endif %}
+{% endif %}
 ```
 
 ---
@@ -210,23 +213,24 @@ export KUBE_TOKEN=your_service_account_token
 Configure provider credentials as needed for your environment.
 {%- endif %}
 
-### Programmatic Configuration
+### KCL Configuration
 
-```rust
-use hemmer_{{ provider_name }}_provider::{{ provider_name | capitalize }}Provider;
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    // Provider will use environment variables by default
-    let provider = {{ provider_name | capitalize }}Provider::new().await?;
-
-    // Or configure programmatically (if supported)
-    // let config = ProviderConfig::new()
-    //     .with_region("us-west-2")
-    //     .with_credentials(...);
-    // let provider = {{ provider_name | capitalize }}Provider::with_config(config).await?;
-
-    Ok(())
+```kcl
+# Configure provider in your KCL code
+provider = {{ provider_name }}.{{ provider_name | capitalize }}Provider {
+{% if provider_name == "aws" %}    region = "us-west-2"
+    # Credentials will be read from environment:
+    # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+{%- elif provider_name == "gcp" %}    project = "my-project-id"
+    region = "us-west1"
+    # Credentials from GOOGLE_APPLICATION_CREDENTIALS
+{%- elif provider_name == "azure" %}    subscription_id = "my-subscription-id"
+    tenant_id = "my-tenant-id"
+    # Credentials from AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
+{%- elif provider_name == "kubernetes" %}    kubeconfig = "~/.kube/config"
+    context = "production-cluster"
+    # Or use in-cluster configuration
+{%- endif %}
 }
 ```
 

@@ -539,6 +539,9 @@ mod tests {
         };
 
         let result = UnifiedProviderGenerator::new(provider_def);
+        if let Err(e) = &result {
+            eprintln!("Error creating generator: {:?}", e);
+        }
         assert!(result.is_ok());
     }
 }

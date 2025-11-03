@@ -46,35 +46,37 @@ The {{ service.name }} service provides access to {{ service.resources | length 
 
 #### Usage Example
 
-```rust
-use hemmer_{{ provider_name }}_provider::{{ provider_name | capitalize }}Provider;
-use anyhow::Result;
+```kcl
+# main.k
+import {{ provider_name }}
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let provider = {{ provider_name | capitalize }}Provider::new().await?;
-    let {{ service.name }}_service = provider.{{ service.name }}();
-    let {{ resource.name }} = {{ service.name }}_service.{{ resource.name | sanitize_identifier_part }}();
-
-{% if resource.operations.create %}    // Create {{ resource.name }}
-    println!("Creating {{ resource.name }}...");
-    // TODO: Implement create logic with required fields:
-{% for field in resource.fields %}{% if field.required %}    //   - {{ field.name }}: {{ field.field_type | rust_type }}
-{% endif %}{% endfor %}{% endif %}
-{% if resource.operations.read %}    // Read {{ resource.name }}
-    println!("Reading {{ resource.name }}...");
-    // TODO: Implement read logic
-{% endif %}
-{% if resource.operations.update %}    // Update {{ resource.name }}
-    println!("Updating {{ resource.name }}...");
-    // TODO: Implement update logic
-{% endif %}
-{% if resource.operations.delete %}    // Delete {{ resource.name }}
-    println!("Deleting {{ resource.name }}...");
-    // TODO: Implement delete logic
-{% endif %}
-    Ok(())
+# Initialize provider
+provider = {{ provider_name }}.{{ provider_name | capitalize }}Provider {
+{% if provider_name == "aws" %}    region = "us-east-1"
+{%- elif provider_name == "gcp" %}    project = "my-project-id"
+{%- elif provider_name == "azure" %}    subscription_id = "my-subscription-id"
+{%- elif provider_name == "kubernetes" %}    kubeconfig = "~/.kube/config"
+{%- endif %}
 }
+{% if resource.operations.create %}
+# Create {{ resource.name }}
+{{ resource.name }} = provider.{{ service.name }}.{{ resource.name | capitalize }} {
+{%- for field in resource.fields %}
+{%- if field.required %}
+    {{ field.name }} = "value"  # {{ field.description | default(value="Required field") }}
+{%- endif %}
+{%- endfor %}
+}
+{% endif %}
+{%- if resource.operations.read %}
+# Access {{ resource.name }} outputs
+{{ resource.name }}_id = {{ resource.name }}.id
+{%- if resource.outputs | length > 0 %}
+{%- for output in resource.outputs %}
+{{ resource.name }}_{{ output.name }} = {{ resource.name }}.{{ output.name }}
+{%- endfor %}
+{%- endif %}
+{%- endif %}
 ```
 
 ---
@@ -83,31 +85,46 @@ async fn main() -> Result<()> {
 
 ## Common Operations
 
-### Accessing the Service
+### Creating Multiple Resources
 
-```rust
-use hemmer_{{ provider_name }}_provider::{{ provider_name | capitalize }}Provider;
+```kcl
+import {{ provider_name }}
 
-let provider = {{ provider_name | capitalize }}Provider::new().await?;
-let {{ service.name }}_service = provider.{{ service.name }}();
+provider = {{ provider_name }}.{{ provider_name | capitalize }}Provider {
+{% if provider_name == "aws" %}    region = "us-east-1"
+{%- elif provider_name == "gcp" %}    project = "my-project-id"
+{%- elif provider_name == "azure" %}    subscription_id = "my-subscription-id"
+{%- elif provider_name == "kubernetes" %}    kubeconfig = "~/.kube/config"
+{%- endif %}
+}
+{% if service.resources | length > 0 %}
+# Create multiple {{ service.resources[0].name }} resources
+{%- for i in range(end=3) %}
+{{ service.resources[0].name }}_{{ i }} = provider.{{ service.name }}.{{ service.resources[0].name | capitalize }} {
+{%- for field in service.resources[0].fields %}
+{%- if field.required %}
+    {{ field.name }} = "value-{{ i }}"
+{%- endif %}
+{%- endfor %}
+}
+{%- endfor %}
+{%- endif %}
 ```
 
-### Error Handling
+### Conditional Creation
 
-```rust
-use anyhow::{Context, Result};
-
-async fn use_{{ service.name }}_service() -> Result<()> {
-    let provider = {{ provider_name | capitalize }}Provider::new()
-        .await
-        .context("Failed to initialize provider")?;
-
-    let {{ service.name }}_service = provider.{{ service.name }}();
-
-    // Your operations here
-
-    Ok(())
-}
+```kcl
+# Only create in production
+if environment == "production":
+{%- if service.resources | length > 0 %}
+    {{ service.resources[0].name }} = provider.{{ service.name }}.{{ service.resources[0].name | capitalize }} {
+{%- for field in service.resources[0].fields %}
+{%- if field.required %}
+        {{ field.name }} = "production-value"
+{%- endif %}
+{%- endfor %}
+    }
+{%- endif %}
 ```
 
 ---
