@@ -16,7 +16,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
-rustdoc-types = "0.56"
+rustdoc-types = "0.57"
 prost = "0.14"
 prost-types = "0.14"
 prost-reflect = "0.16"
