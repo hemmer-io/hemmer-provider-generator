@@ -259,6 +259,11 @@ pub struct FieldDefinition {
     pub immutable: bool,
     /// Human-readable description
     pub description: Option<String>,
+    /// For output fields: the SDK response accessor method name (snake_case)
+    /// e.g., "bucket_arn" for response.bucket_arn()
+    /// If None, defaults to the field name
+    #[serde(default)]
+    pub response_accessor: Option<String>,
 }
 
 /// Represents a field type in the intermediate representation

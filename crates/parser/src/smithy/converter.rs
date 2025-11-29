@@ -211,6 +211,7 @@ fn extract_fields_from_operation(
                     sensitive,
                     immutable: false, // TODO: determine from traits
                     description,
+                    response_accessor: None, // Input fields don't have response accessors
                 });
             }
         }
@@ -240,13 +241,17 @@ fn extract_outputs_from_operation(
                 let field_type = convert_smithy_type_to_field_type(model, &member.target)?;
                 let description = extract_documentation(&member.traits);
 
+                // The SDK accessor method name is the snake_case version of the member name
+                let accessor_name = to_snake_case(field_name);
                 outputs.push(FieldDefinition {
-                    name: to_snake_case(field_name),
+                    name: accessor_name.clone(),
                     field_type,
                     required: false,
                     sensitive: member.traits.contains_key(super::types::traits::SENSITIVE),
                     immutable: true,
                     description,
+                    // For AWS SDK, the response accessor is the same as the field name
+                    response_accessor: Some(accessor_name),
                 });
             }
         }

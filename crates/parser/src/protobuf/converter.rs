@@ -133,18 +133,18 @@ fn build_resource_from_methods(
         return Ok(None);
     }
 
-    // Extract fields from create/update request
+    // Extract fields from create/update request (input fields, no response accessors)
     let fields = if let Some(method) = create_method {
-        extract_fields_from_message(pool, method.input())?
+        extract_fields_from_message(pool, method.input(), false)?
     } else if let Some(method) = update_method {
-        extract_fields_from_message(pool, method.input())?
+        extract_fields_from_message(pool, method.input(), false)?
     } else {
         Vec::new()
     };
 
-    // Extract outputs from read response
+    // Extract outputs from read response (output fields, have response accessors)
     let outputs = if let Some(method) = read_method {
-        extract_fields_from_message(pool, method.output())?
+        extract_fields_from_message(pool, method.output(), true)?
     } else {
         Vec::new()
     };
@@ -176,22 +176,32 @@ fn build_resource_from_methods(
 }
 
 /// Extract fields from protobuf message descriptor
+///
+/// `is_response` - if true, fields are from a response and should have response accessors
 fn extract_fields_from_message(
     pool: &DescriptorPool,
     message: prost_reflect::MessageDescriptor,
+    is_response: bool,
 ) -> Result<Vec<FieldDefinition>> {
     let mut fields = Vec::new();
 
     for field in message.fields() {
         let field_type = convert_protobuf_kind_to_field_type(pool, &field.kind())?;
+        let accessor_name = to_snake_case(field.name());
 
         fields.push(FieldDefinition {
-            name: to_snake_case(field.name()),
+            name: accessor_name.clone(),
             field_type,
             required: !field.is_list() && !field.is_map(),
             sensitive: false,
             immutable: false,
             description: None, // Could extract from proto comments
+            // Only response fields have accessors
+            response_accessor: if is_response {
+                Some(accessor_name)
+            } else {
+                None
+            },
         });
     }
 

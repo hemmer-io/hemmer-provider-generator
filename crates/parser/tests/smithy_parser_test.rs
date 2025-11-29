@@ -159,6 +159,23 @@ fn test_parse_simple_smithy_model() {
     // Verify outputs from GetBucket output
     assert!(!bucket.outputs.is_empty(), "Should have outputs");
 
+    // Verify that output fields have response accessors
+    // GetBucketOutput has BucketName and CreationDate fields
+    let bucket_name_output = bucket.outputs.iter().find(|o| o.name == "bucket_name");
+    assert!(
+        bucket_name_output.is_some(),
+        "Should have bucket_name output from GetBucketOutput"
+    );
+    assert!(
+        bucket_name_output.unwrap().response_accessor.is_some(),
+        "Output field should have response_accessor"
+    );
+    assert_eq!(
+        bucket_name_output.unwrap().response_accessor.as_deref(),
+        Some("bucket_name"),
+        "response_accessor should match field name"
+    );
+
     println!("✅ Successfully parsed Smithy model!");
     println!("   Service: {}", service_def.name);
     println!("   Resources: {}", service_def.resources.len());

@@ -126,6 +126,7 @@ impl AwsParser {
                     sensitive: false,
                     immutable: true, // Bucket name is immutable
                     description: Some("Bucket name (globally unique)".to_string()),
+                    response_accessor: None,
                 },
                 FieldDefinition {
                     name: "acl".to_string(),
@@ -134,6 +135,7 @@ impl AwsParser {
                     sensitive: false,
                     immutable: false,
                     description: Some("Canned ACL to apply to the bucket".to_string()),
+                    response_accessor: None,
                 },
                 FieldDefinition {
                     name: "tags".to_string(),
@@ -145,6 +147,7 @@ impl AwsParser {
                     sensitive: false,
                     immutable: false,
                     description: Some("Tags to apply to the bucket".to_string()),
+                    response_accessor: None,
                 },
             ],
             outputs: vec![
@@ -155,6 +158,7 @@ impl AwsParser {
                     sensitive: false,
                     immutable: false,
                     description: Some("Bucket location/region".to_string()),
+                    response_accessor: Some("location".to_string()),
                 },
                 FieldDefinition {
                     name: "arn".to_string(),
@@ -163,6 +167,7 @@ impl AwsParser {
                     sensitive: false,
                     immutable: true,
                     description: Some("Amazon Resource Name (ARN) of the bucket".to_string()),
+                    response_accessor: Some("arn".to_string()),
                 },
             ],
             operations: Operations {

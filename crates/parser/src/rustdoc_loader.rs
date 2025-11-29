@@ -141,6 +141,8 @@ impl RustdocLoader {
                 sensitive: crate::TypeMapper::is_sensitive(&field_name),
                 immutable: crate::TypeMapper::is_immutable(&field_name),
                 description: field_item.docs.clone(),
+                // For rustdoc-parsed fields, the accessor is the field name itself
+                response_accessor: Some(field_name),
             })
         } else {
             None
