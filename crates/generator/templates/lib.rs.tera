@@ -1,6 +1,9 @@
 //! {{ service_name | capitalize }} Provider for Hemmer
 //!
 //! Auto-generated from {{ provider }} SDK version {{ sdk_version }}
+//!
+//! Protocol version: Uses hemmer-provider-sdk protocol version negotiation.
+//! See [`PROTOCOL_VERSION`] for the current protocol version.
 
 pub mod resources;
 
@@ -8,10 +11,15 @@ use hemmer_provider_sdk::{
     async_trait, serde_json, tonic,
     ProviderService, ProviderSchema, Schema, Block, Attribute, AttributeType, AttributeFlags,
     PlanResult, AttributeChange, ImportedResource, ProviderMetadata, ServerCapabilities,
+    // Protocol versioning - re-export for visibility
+    PROTOCOL_VERSION, MIN_PROTOCOL_VERSION, check_protocol_version,
 };
 use std::collections::HashMap;
 use thiserror::Error;
 use tracing::{debug, error, info};
+
+// Re-export protocol version constants for consumers
+pub use hemmer_provider_sdk::{PROTOCOL_VERSION as SDK_PROTOCOL_VERSION, MIN_PROTOCOL_VERSION as SDK_MIN_PROTOCOL_VERSION};
 
 /// Provider error types
 #[derive(Error, Debug)]
