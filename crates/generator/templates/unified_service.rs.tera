@@ -5,16 +5,79 @@
 pub mod resources;
 
 use std::collections::HashMap;
+use tracing::{debug, info};
 
+{% if provider | has_config_crate %}
+/// Create a resource in the {{ service.name }} service
+pub async fn create_resource(
+    resource_name: &str,
+    client: {{ provider | client_type(service_name=service.name) }},
+    input: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    info!("Creating {}.{}", "{{ service.name }}", resource_name);
+    match resource_name {
+{% for resource in service.resources %}
+        "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::create(client, input).await,
+{% endfor %}
+        _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
+    }
+}
+
+/// Read a resource in the {{ service.name }} service
+pub async fn read_resource(
+    resource_name: &str,
+    client: {{ provider | client_type(service_name=service.name) }},
+    current: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    debug!("Reading {}.{}", "{{ service.name }}", resource_name);
+    match resource_name {
+{% for resource in service.resources %}
+        "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::read(client, current).await,
+{% endfor %}
+        _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
+    }
+}
+
+/// Update a resource in the {{ service.name }} service
+pub async fn update_resource(
+    resource_name: &str,
+    client: {{ provider | client_type(service_name=service.name) }},
+    input: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    info!("Updating {}.{}", "{{ service.name }}", resource_name);
+    match resource_name {
+{% for resource in service.resources %}
+        "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::update(client, input).await,
+{% endfor %}
+        _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
+    }
+}
+
+/// Delete a resource in the {{ service.name }} service
+pub async fn delete_resource(
+    resource_name: &str,
+    client: {{ provider | client_type(service_name=service.name) }},
+    current: serde_json::Value,
+) -> Result<(), String> {
+    info!("Deleting {}.{}", "{{ service.name }}", resource_name);
+    match resource_name {
+{% for resource in service.resources %}
+        "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::delete(client, current).await,
+{% endfor %}
+        _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
+    }
+}
+{% else %}
 /// Create a resource in the {{ service.name }} service
 pub async fn create_resource(
     resource_name: &str,
     config: &HashMap<String, String>,
     input: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    info!("Creating {}.{}", "{{ service.name }}", resource_name);
     match resource_name {
 {% for resource in service.resources %}
-        "{{ resource.name }}" => resources::{{ resource.name }}::create(config, input).await,
+        "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::create(config, input).await,
 {% endfor %}
         _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
     }
@@ -26,9 +89,10 @@ pub async fn read_resource(
     config: &HashMap<String, String>,
     current: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    debug!("Reading {}.{}", "{{ service.name }}", resource_name);
     match resource_name {
 {% for resource in service.resources %}
-        "{{ resource.name }}" => resources::{{ resource.name }}::read(config, current).await,
+        "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::read(config, current).await,
 {% endfor %}
         _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
     }
@@ -40,9 +104,10 @@ pub async fn update_resource(
     config: &HashMap<String, String>,
     input: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    info!("Updating {}.{}", "{{ service.name }}", resource_name);
     match resource_name {
 {% for resource in service.resources %}
-        "{{ resource.name }}" => resources::{{ resource.name }}::update(config, input).await,
+        "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::update(config, input).await,
 {% endfor %}
         _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
     }
@@ -54,10 +119,12 @@ pub async fn delete_resource(
     config: &HashMap<String, String>,
     current: serde_json::Value,
 ) -> Result<(), String> {
+    info!("Deleting {}.{}", "{{ service.name }}", resource_name);
     match resource_name {
 {% for resource in service.resources %}
-        "{{ resource.name }}" => resources::{{ resource.name }}::delete(config, current).await,
+        "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::delete(config, current).await,
 {% endfor %}
         _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
     }
 }
+{% endif %}

@@ -191,6 +191,16 @@ impl ProviderGenerator {
         context.insert("service_name", &self.service_def.name);
         context.insert("sdk_version", &self.service_def.sdk_version);
         context.insert("resources", &self.service_def.resources);
+
+        // Add SDK configuration for provider-agnostic template generation
+        let sdk_config = self.service_def.provider.sdk_config();
+        context.insert("sdk_config", &sdk_config);
+        context.insert("config_attrs", &sdk_config.config_attrs);
+        context.insert(
+            "uses_shared_client",
+            &self.service_def.provider.uses_shared_client(),
+        );
+
         context
     }
 }
@@ -534,6 +544,15 @@ impl UnifiedProviderGenerator {
             .map(|s| s.resources.len())
             .sum();
         context.insert("total_resources", &total_resources);
+
+        // Add SDK configuration for provider-agnostic template generation
+        let sdk_config = self.provider_def.provider.sdk_config();
+        context.insert("sdk_config", &sdk_config);
+        context.insert("config_attrs", &sdk_config.config_attrs);
+        context.insert(
+            "uses_shared_client",
+            &self.provider_def.provider.uses_shared_client(),
+        );
 
         context
     }

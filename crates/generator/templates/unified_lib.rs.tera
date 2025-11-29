@@ -19,22 +19,50 @@ use hemmer_provider_sdk::{
     PROTOCOL_VERSION, MIN_PROTOCOL_VERSION, check_protocol_version,
 };
 use std::collections::HashMap;
+{% if provider | has_config_crate %}
+use std::sync::Arc;
+use tokio::sync::RwLock;
+{% endif %}
+use tracing::{debug, error, info, warn};
 
 // Re-export protocol version constants for consumers
 pub use hemmer_provider_sdk::{PROTOCOL_VERSION as SDK_PROTOCOL_VERSION, MIN_PROTOCOL_VERSION as SDK_MIN_PROTOCOL_VERSION};
 
 /// Unified provider for {{ provider_name | capitalize }}
 pub struct {{ provider_name | capitalize }}Provider {
+{% if provider | has_config_crate %}
+    /// SDK clients for each service (set during configure)
+{% for service in services %}
+    {{ service.name }}_client: Arc<RwLock<Option<{{ provider | client_type(service_name=service.name) }}>>>,
+{% endfor %}
+{% else %}
     config: HashMap<String, String>,
+{% endif %}
 }
 
 impl {{ provider_name | capitalize }}Provider {
     /// Create a new provider instance
     pub fn new() -> Self {
         Self {
+{% if provider | has_config_crate %}
+{% for service in services %}
+            {{ service.name }}_client: Arc::new(RwLock::new(None)),
+{% endfor %}
+{% else %}
             config: HashMap::new(),
+{% endif %}
         }
     }
+
+{% if provider | has_config_crate %}
+{% for service in services %}
+    /// Get the {{ service.name }} client, returning an error if not configured
+    pub async fn get_{{ service.name }}_client(&self) -> Result<{{ provider | client_type(service_name=service.name) }}, String> {
+        let guard = self.{{ service.name }}_client.read().await;
+        guard.clone().ok_or_else(|| "Provider not configured. Call configure() first.".to_string())
+    }
+{% endfor %}
+{% endif %}
 
     /// Build the provider schema
     fn build_schema() -> ProviderSchema {
@@ -43,59 +71,14 @@ impl {{ provider_name | capitalize }}Provider {
                 version: 1,
                 block: Block {
                     attributes: vec![
-{% if provider == "Aws" %}
+{% for attr in config_attrs %}
                         Attribute {
-                            name: "region".to_string(),
+                            name: "{{ attr.name }}".to_string(),
                             attr_type: AttributeType::String,
-                            flags: AttributeFlags::OPTIONAL,
-                            description: Some("AWS region to use".to_string()),
+                            flags: {% if attr.required %}AttributeFlags::REQUIRED{% else %}AttributeFlags::OPTIONAL{% endif %},
+                            description: Some("{{ attr.description }}".to_string()),
                         },
-                        Attribute {
-                            name: "profile".to_string(),
-                            attr_type: AttributeType::String,
-                            flags: AttributeFlags::OPTIONAL,
-                            description: Some("AWS profile to use".to_string()),
-                        },
-{% elif provider == "Gcp" %}
-                        Attribute {
-                            name: "project".to_string(),
-                            attr_type: AttributeType::String,
-                            flags: AttributeFlags::OPTIONAL,
-                            description: Some("GCP project ID".to_string()),
-                        },
-                        Attribute {
-                            name: "region".to_string(),
-                            attr_type: AttributeType::String,
-                            flags: AttributeFlags::OPTIONAL,
-                            description: Some("GCP region to use".to_string()),
-                        },
-{% elif provider == "Azure" %}
-                        Attribute {
-                            name: "subscription_id".to_string(),
-                            attr_type: AttributeType::String,
-                            flags: AttributeFlags::OPTIONAL,
-                            description: Some("Azure subscription ID".to_string()),
-                        },
-                        Attribute {
-                            name: "tenant_id".to_string(),
-                            attr_type: AttributeType::String,
-                            flags: AttributeFlags::OPTIONAL,
-                            description: Some("Azure tenant ID".to_string()),
-                        },
-{% elif provider == "Kubernetes" %}
-                        Attribute {
-                            name: "kubeconfig".to_string(),
-                            attr_type: AttributeType::String,
-                            flags: AttributeFlags::OPTIONAL,
-                            description: Some("Path to kubeconfig file".to_string()),
-                        },
-                        Attribute {
-                            name: "context".to_string(),
-                            attr_type: AttributeType::String,
-                            flags: AttributeFlags::OPTIONAL,
-                            description: Some("Kubernetes context to use".to_string()),
-                        },
-{% endif %}
+{% endfor %}
                     ],
                     block_types: vec![],
                 },
@@ -121,7 +104,7 @@ impl {{ provider_name | capitalize }}Provider {
 {% for field in resource.fields %}
                         Attribute {
                             name: "{{ field.name }}".to_string(),
-                            attr_type: AttributeType::{{ field.field_type | sdk_attr_type }},
+                            attr_type: {{ field.field_type | sdk_attr_type }},
                             flags: {% if field.required %}AttributeFlags::REQUIRED{% else %}AttributeFlags::OPTIONAL{% endif %}{% if field.sensitive %} | AttributeFlags::SENSITIVE{% endif %}{% if field.immutable %} | AttributeFlags::FORCE_NEW{% endif %},
                             description: {% if field.description %}Some("{{ field.description }}".to_string()){% else %}None{% endif %},
                         },
@@ -129,7 +112,7 @@ impl {{ provider_name | capitalize }}Provider {
 {% for output in resource.outputs %}
                         Attribute {
                             name: "{{ output.name }}".to_string(),
-                            attr_type: AttributeType::{{ output.field_type | sdk_attr_type }},
+                            attr_type: {{ output.field_type | sdk_attr_type }},
                             flags: AttributeFlags::COMPUTED,
                             description: {% if output.description %}Some("{{ output.description }}".to_string()){% else %}None{% endif %},
                         },
@@ -157,13 +140,38 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         Self::build_schema()
     }
 
-    fn configure(&mut self, config: HashMap<String, serde_json::Value>) -> Result<(), String> {
-        for (key, value) in config {
-            if let serde_json::Value::String(s) = value {
-                self.config.insert(key, s);
-            }
+    async fn configure(&self, config: serde_json::Value) -> Result<Vec<String>, String> {
+        info!("Configuring {{ provider_name }} provider");
+        debug!("Config: {:?}", config);
+
+{% if provider == "Aws" %}
+        // Load AWS config from environment, optionally using provided region/profile
+        let mut config_loader = aws_config::from_env();
+
+        if let Some(region) = config.get("region").and_then(|v| v.as_str()) {
+            info!("Using region: {}", region);
+            config_loader = config_loader.region(aws_config::Region::new(region.to_string()));
         }
-        Ok(())
+
+        if let Some(profile) = config.get("profile").and_then(|v| v.as_str()) {
+            info!("Using profile: {}", profile);
+            config_loader = config_loader.profile_name(profile);
+        }
+
+        let sdk_config = config_loader.load().await;
+
+        // Initialize clients for all services
+{% for service in services %}
+        {
+            let client = {{ provider | client_type(service_name=service.name) }}::new(&sdk_config);
+            let mut guard = self.{{ service.name }}_client.write().await;
+            *guard = Some(client);
+            info!("{{ service.name }} client configured");
+        }
+{% endfor %}
+{% endif %}
+
+        Ok(vec![])
     }
 
     fn plan(
@@ -190,6 +198,8 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         resource_type: &str,
         planned: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
+        info!("Creating {} resource", resource_type);
+
         // Parse resource type: service_resource format
         let parts: Vec<&str> = resource_type.split('_').collect();
         if parts.len() < 2 {
@@ -202,7 +212,12 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         match service_name {
 {% for service in services %}
             "{{ service.name }}" => {
+{% if provider | has_config_crate %}
+                let client = self.get_{{ service.name }}_client().await?;
+                {{ service.name }}::create_resource(&resource_name, client, planned).await
+{% else %}
                 {{ service.name }}::create_resource(&resource_name, &self.config, planned).await
+{% endif %}
             }
 {% endfor %}
             _ => Err(format!("Unknown service: {}", service_name)),
@@ -214,6 +229,8 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         resource_type: &str,
         current: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
+        debug!("Reading {} resource", resource_type);
+
         // Parse resource type: service_resource format
         let parts: Vec<&str> = resource_type.split('_').collect();
         if parts.len() < 2 {
@@ -226,7 +243,12 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         match service_name {
 {% for service in services %}
             "{{ service.name }}" => {
+{% if provider | has_config_crate %}
+                let client = self.get_{{ service.name }}_client().await?;
+                {{ service.name }}::read_resource(&resource_name, client, current).await
+{% else %}
                 {{ service.name }}::read_resource(&resource_name, &self.config, current).await
+{% endif %}
             }
 {% endfor %}
             _ => Err(format!("Unknown service: {}", service_name)),
@@ -239,6 +261,8 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         _prior: serde_json::Value,
         planned: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
+        info!("Updating {} resource", resource_type);
+
         // Parse resource type: service_resource format
         let parts: Vec<&str> = resource_type.split('_').collect();
         if parts.len() < 2 {
@@ -251,7 +275,12 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         match service_name {
 {% for service in services %}
             "{{ service.name }}" => {
+{% if provider | has_config_crate %}
+                let client = self.get_{{ service.name }}_client().await?;
+                {{ service.name }}::update_resource(&resource_name, client, planned).await
+{% else %}
                 {{ service.name }}::update_resource(&resource_name, &self.config, planned).await
+{% endif %}
             }
 {% endfor %}
             _ => Err(format!("Unknown service: {}", service_name)),
@@ -263,6 +292,8 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         resource_type: &str,
         current: serde_json::Value,
     ) -> Result<(), String> {
+        info!("Deleting {} resource", resource_type);
+
         // Parse resource type: service_resource format
         let parts: Vec<&str> = resource_type.split('_').collect();
         if parts.len() < 2 {
@@ -275,7 +306,12 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         match service_name {
 {% for service in services %}
             "{{ service.name }}" => {
+{% if provider | has_config_crate %}
+                let client = self.get_{{ service.name }}_client().await?;
+                {{ service.name }}::delete_resource(&resource_name, client, current).await
+{% else %}
                 {{ service.name }}::delete_resource(&resource_name, &self.config, current).await
+{% endif %}
             }
 {% endfor %}
             _ => Err(format!("Unknown service: {}", service_name)),

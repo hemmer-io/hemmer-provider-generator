@@ -15,8 +15,12 @@ use hemmer_provider_sdk::{
     PROTOCOL_VERSION, MIN_PROTOCOL_VERSION, check_protocol_version,
 };
 use std::collections::HashMap;
+{% if provider | has_config_crate %}
+use std::sync::Arc;
+use tokio::sync::RwLock;
+{% endif %}
 use thiserror::Error;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 // Re-export protocol version constants for consumers
 pub use hemmer_provider_sdk::{PROTOCOL_VERSION as SDK_PROTOCOL_VERSION, MIN_PROTOCOL_VERSION as SDK_MIN_PROTOCOL_VERSION};
@@ -39,6 +43,9 @@ pub enum ProviderError {
     #[error("Unknown resource type: {0}")]
     UnknownResource(String),
 
+    #[error("Provider not configured")]
+    NotConfigured,
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -48,14 +55,9 @@ pub type Result<T> = std::result::Result<T, ProviderError>;
 
 /// {{ service_name | capitalize }} Provider
 pub struct {{ service_name | capitalize }}Provider {
-{% if provider == "Aws" %}
-    client: Option<aws_sdk_{{ service_name }}::Client>,
-{% elif provider == "Gcp" %}
-    // GCP client placeholder
-    _configured: bool,
-{% elif provider == "Azure" %}
-    // Azure client placeholder
-    _configured: bool,
+{% if provider | has_config_crate %}
+    /// SDK client (set during configure)
+    client: Arc<RwLock<Option<{{ provider | client_type(service_name=service_name) }}>>>,
 {% else %}
     _configured: bool,
 {% endif %}
@@ -65,13 +67,23 @@ impl {{ service_name | capitalize }}Provider {
     /// Create a new provider instance (unconfigured)
     pub fn new() -> Self {
         Self {
-{% if provider == "Aws" %}
-            client: None,
+{% if provider | has_config_crate %}
+            client: Arc::new(RwLock::new(None)),
 {% else %}
             _configured: false,
 {% endif %}
         }
     }
+
+{% if provider | has_config_crate %}
+    /// Get the SDK client, returning an error if not configured
+    async fn get_client(&self) -> std::result::Result<{{ provider | client_type(service_name=service_name) }}, tonic::Status> {
+        let guard = self.client.read().await;
+        guard.clone().ok_or_else(|| {
+            tonic::Status::failed_precondition("Provider not configured. Call configure() first.")
+        })
+    }
+{% endif %}
 
     /// Build the provider schema
     fn build_schema() -> ProviderSchema {
@@ -116,34 +128,12 @@ impl {{ service_name | capitalize }}Provider {
 
         // Provider config schema
         let mut config_attrs = HashMap::new();
-{% if provider == "Aws" %}
+{% for attr in config_attrs %}
         config_attrs.insert(
-            "region".to_string(),
-            Attribute::optional_string().with_description("AWS region to use"),
+            "{{ attr.name }}".to_string(),
+            Attribute::optional_string().with_description("{{ attr.description }}"),
         );
-        config_attrs.insert(
-            "profile".to_string(),
-            Attribute::optional_string().with_description("AWS profile to use"),
-        );
-{% elif provider == "Gcp" %}
-        config_attrs.insert(
-            "project".to_string(),
-            Attribute::optional_string().with_description("GCP project ID"),
-        );
-        config_attrs.insert(
-            "region".to_string(),
-            Attribute::optional_string().with_description("GCP region to use"),
-        );
-{% elif provider == "Azure" %}
-        config_attrs.insert(
-            "subscription_id".to_string(),
-            Attribute::optional_string().with_description("Azure subscription ID"),
-        );
-        config_attrs.insert(
-            "tenant_id".to_string(),
-            Attribute::optional_string().with_description("Azure tenant ID"),
-        );
-{% endif %}
+{% endfor %}
 
         ProviderSchema {
             provider: Schema {
@@ -183,19 +173,22 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
         let mut config_loader = aws_config::from_env();
 
         if let Some(region) = config.get("region").and_then(|v| v.as_str()) {
+            info!("Using region: {}", region);
             config_loader = config_loader.region(aws_config::Region::new(region.to_string()));
         }
 
         if let Some(profile) = config.get("profile").and_then(|v| v.as_str()) {
+            info!("Using profile: {}", profile);
             config_loader = config_loader.profile_name(profile);
         }
 
         let sdk_config = config_loader.load().await;
-        let client = aws_sdk_{{ service_name }}::Client::new(&sdk_config);
+        let client = {{ provider | client_type(service_name=service_name) }}::new(&sdk_config);
 
-        // Store client (requires interior mutability in real implementation)
-        // For now, we'll reconstruct on each call
-        let _ = client;
+        // Store the client for later use
+        let mut guard = self.client.write().await;
+        *guard = Some(client);
+        info!("{{ service_name | capitalize }} provider configured successfully");
 {% endif %}
 
         Ok(vec![])
@@ -227,12 +220,92 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
     ) -> std::result::Result<serde_json::Value, tonic::Status> {
         info!("Creating {} resource", resource_type);
 
+{% if provider | has_config_crate %}
+        let client = self.get_client().await?;
+{% endif %}
+
         match resource_type {
 {% for resource in resources %}
             "{{ resource.name }}" => {
-                // TODO: Implement {{ resource.name }} creation using SDK
+{% if resource.operations.create %}
+                debug!("Creating {{ resource.name }}: {:?}", planned_state);
+
+                // Build the SDK request
+                let mut request = client.{{ resource.operations.create.sdk_operation }}();
+
+                // Set required fields from planned state
+{% for field in resource.fields %}
+{% if field.required %}
+                if let Some(val) = planned_state.get("{{ field.name }}") {
+{% if field.field_type == "String" %}
+                    if let Some(s) = val.as_str() {
+                        request = request.{{ field.name }}(s);
+                    }
+{% elif field.field_type == "Integer" %}
+                    if let Some(n) = val.as_i64() {
+                        request = request.{{ field.name }}(n as i32);
+                    }
+{% elif field.field_type == "Boolean" %}
+                    if let Some(b) = val.as_bool() {
+                        request = request.{{ field.name }}(b);
+                    }
+{% else %}
+                    if let Some(s) = val.as_str() {
+                        request = request.{{ field.name }}(s);
+                    }
+{% endif %}
+                }
+{% endif %}
+{% endfor %}
+
+                // Set optional fields
+{% for field in resource.fields %}
+{% if not field.required %}
+                if let Some(val) = planned_state.get("{{ field.name }}") {
+{% if field.field_type == "String" %}
+                    if let Some(s) = val.as_str() {
+                        request = request.{{ field.name }}(s);
+                    }
+{% elif field.field_type == "Integer" %}
+                    if let Some(n) = val.as_i64() {
+                        request = request.{{ field.name }}(n as i32);
+                    }
+{% elif field.field_type == "Boolean" %}
+                    if let Some(b) = val.as_bool() {
+                        request = request.{{ field.name }}(b);
+                    }
+{% else %}
+                    if let Some(s) = val.as_str() {
+                        request = request.{{ field.name }}(s);
+                    }
+{% endif %}
+                }
+{% endif %}
+{% endfor %}
+
+                // Execute the request
+                match request.send().await {
+                    Ok(response) => {
+                        info!("Successfully created {{ resource.name }}");
+                        debug!("Response: {:?}", response);
+
+                        // Build the result state with any computed outputs
+                        let mut result = planned_state.clone();
+                        // TODO: Extract computed fields from response
+                        Ok(result)
+                    }
+                    Err(e) => {
+                        error!("Failed to create {{ resource.name }}: {:?}", e);
+                        Err(tonic::Status::internal(format!(
+                            "Failed to create {{ resource.name }}: {}",
+                            e
+                        )))
+                    }
+                }
+{% else %}
                 debug!("Creating {{ resource.name }}: {:?}", planned_state);
                 Ok(planned_state)
+{% endif %}
             }
 {% endfor %}
             _ => {
@@ -253,11 +326,45 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
     ) -> std::result::Result<serde_json::Value, tonic::Status> {
         debug!("Reading {} resource", resource_type);
 
+{% if provider | has_config_crate %}
+        let client = self.get_client().await?;
+{% endif %}
+
         match resource_type {
 {% for resource in resources %}
             "{{ resource.name }}" => {
-                // TODO: Implement {{ resource.name }} read using SDK
+{% if resource.operations.read %}
+                debug!("Reading {{ resource.name }}: {:?}", current_state);
+
+                // Build the SDK request
+                let mut request = client.{{ resource.operations.read.sdk_operation }}();
+
+                // Set identifier fields from current state
+{% for field in resource.fields %}
+{% if field.required and field.immutable %}
+                if let Some(val) = current_state.get("{{ field.name }}") {
+                    if let Some(s) = val.as_str() {
+                        request = request.{{ field.name }}(s);
+                    }
+                }
+{% endif %}
+{% endfor %}
+
+                match request.send().await {
+                    Ok(response) => {
+                        debug!("Read response: {:?}", response);
+                        // TODO: Map response fields back to state
+                        Ok(current_state)
+                    }
+                    Err(e) => {
+                        warn!("Failed to read {{ resource.name }}: {:?}", e);
+                        // Return current state on read failure (resource may not exist)
+                        Ok(current_state)
+                    }
+                }
+{% else %}
                 Ok(current_state)
+{% endif %}
             }
 {% endfor %}
             _ => Err(tonic::Status::not_found(format!(
@@ -276,11 +383,72 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
     ) -> std::result::Result<serde_json::Value, tonic::Status> {
         info!("Updating {} resource", resource_type);
 
+{% if provider | has_config_crate %}
+        let client = self.get_client().await?;
+{% endif %}
+
         match resource_type {
 {% for resource in resources %}
             "{{ resource.name }}" => {
-                // TODO: Implement {{ resource.name }} update using SDK
+{% if resource.operations.update %}
+                debug!("Updating {{ resource.name }}: {:?}", planned_state);
+
+                // Build the SDK request
+                let mut request = client.{{ resource.operations.update.sdk_operation }}();
+
+                // Set identifier fields
+{% for field in resource.fields %}
+{% if field.required and field.immutable %}
+                if let Some(val) = planned_state.get("{{ field.name }}") {
+                    if let Some(s) = val.as_str() {
+                        request = request.{{ field.name }}(s);
+                    }
+                }
+{% endif %}
+{% endfor %}
+
+                // Set updatable fields
+{% for field in resource.fields %}
+{% if not field.immutable %}
+                if let Some(val) = planned_state.get("{{ field.name }}") {
+{% if field.field_type == "String" %}
+                    if let Some(s) = val.as_str() {
+                        request = request.{{ field.name }}(s);
+                    }
+{% elif field.field_type == "Integer" %}
+                    if let Some(n) = val.as_i64() {
+                        request = request.{{ field.name }}(n as i32);
+                    }
+{% elif field.field_type == "Boolean" %}
+                    if let Some(b) = val.as_bool() {
+                        request = request.{{ field.name }}(b);
+                    }
+{% else %}
+                    if let Some(s) = val.as_str() {
+                        request = request.{{ field.name }}(s);
+                    }
+{% endif %}
+                }
+{% endif %}
+{% endfor %}
+
+                match request.send().await {
+                    Ok(response) => {
+                        info!("Successfully updated {{ resource.name }}");
+                        debug!("Response: {:?}", response);
+                        Ok(planned_state)
+                    }
+                    Err(e) => {
+                        error!("Failed to update {{ resource.name }}: {:?}", e);
+                        Err(tonic::Status::internal(format!(
+                            "Failed to update {{ resource.name }}: {}",
+                            e
+                        )))
+                    }
+                }
+{% else %}
                 Ok(planned_state)
+{% endif %}
             }
 {% endfor %}
             _ => Err(tonic::Status::not_found(format!(
@@ -298,12 +466,47 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
     ) -> std::result::Result<(), tonic::Status> {
         info!("Deleting {} resource", resource_type);
 
+{% if provider | has_config_crate %}
+        let client = self.get_client().await?;
+{% endif %}
+
         match resource_type {
 {% for resource in resources %}
             "{{ resource.name }}" => {
-                // TODO: Implement {{ resource.name }} deletion using SDK
+{% if resource.operations.delete %}
+                debug!("Deleting {{ resource.name }}: {:?}", current_state);
+
+                // Build the SDK request
+                let mut request = client.{{ resource.operations.delete.sdk_operation }}();
+
+                // Set identifier fields
+{% for field in resource.fields %}
+{% if field.required and field.immutable %}
+                if let Some(val) = current_state.get("{{ field.name }}") {
+                    if let Some(s) = val.as_str() {
+                        request = request.{{ field.name }}(s);
+                    }
+                }
+{% endif %}
+{% endfor %}
+
+                match request.send().await {
+                    Ok(_) => {
+                        info!("Successfully deleted {{ resource.name }}");
+                        Ok(())
+                    }
+                    Err(e) => {
+                        error!("Failed to delete {{ resource.name }}: {:?}", e);
+                        Err(tonic::Status::internal(format!(
+                            "Failed to delete {{ resource.name }}: {}",
+                            e
+                        )))
+                    }
+                }
+{% else %}
                 debug!("Deleting {{ resource.name }}: {:?}", current_state);
                 Ok(())
+{% endif %}
             }
 {% endfor %}
             _ => Err(tonic::Status::not_found(format!(
