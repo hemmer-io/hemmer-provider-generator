@@ -2,6 +2,9 @@
 //!
 //! Auto-generated unified provider from {{ provider_name }} SDK version {{ sdk_version }}
 //!
+//! Protocol version: Uses hemmer-provider-sdk protocol version negotiation.
+//! See [`PROTOCOL_VERSION`] for the current protocol version.
+//!
 //! This provider includes multiple services:
 {% for service in services %}//! - {{ service.name }}
 {% endfor %}
@@ -12,8 +15,13 @@
 use hemmer_provider_sdk::{
     Attribute, AttributeFlags, AttributeType, Block, PlanResult, ProviderSchema, ProviderService,
     Schema,
+    // Protocol versioning - re-export for visibility
+    PROTOCOL_VERSION, MIN_PROTOCOL_VERSION, check_protocol_version,
 };
 use std::collections::HashMap;
+
+// Re-export protocol version constants for consumers
+pub use hemmer_provider_sdk::{PROTOCOL_VERSION as SDK_PROTOCOL_VERSION, MIN_PROTOCOL_VERSION as SDK_MIN_PROTOCOL_VERSION};
 
 /// Unified provider for {{ provider_name | capitalize }}
 pub struct {{ provider_name | capitalize }}Provider {

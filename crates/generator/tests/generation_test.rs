@@ -129,8 +129,8 @@ fn test_generate_s3_provider() {
         "Should have AWS SDK dependency"
     );
     assert!(
-        cargo_toml.contains("hemmer-provider-sdk"),
-        "Should have Hemmer SDK dependency"
+        cargo_toml.contains("hemmer-provider-sdk = \"0.2\""),
+        "Should have Hemmer SDK 0.2+ dependency for protocol versioning"
     );
     assert!(
         cargo_toml.contains("[[bin]]"),
@@ -161,6 +161,14 @@ fn test_generate_s3_provider() {
     assert!(
         lib_rs.contains("async fn create"),
         "Should implement create method"
+    );
+    assert!(
+        lib_rs.contains("PROTOCOL_VERSION"),
+        "Should import protocol version constants"
+    );
+    assert!(
+        lib_rs.contains("SDK_PROTOCOL_VERSION"),
+        "Should re-export protocol version for consumers"
     );
 
     println!("✅ Provider generated successfully to: {:?}", output_path);

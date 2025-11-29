@@ -177,7 +177,7 @@ fn test_generate_unified_aws_provider() {
     assert!(cargo_toml_content.contains("hemmer-aws-provider"));
     assert!(cargo_toml_content.contains("aws-sdk-s3"));
     assert!(cargo_toml_content.contains("aws-sdk-dynamodb"));
-    assert!(cargo_toml_content.contains("hemmer-provider-sdk"));
+    assert!(cargo_toml_content.contains("hemmer-provider-sdk = \"0.2\""));
     assert!(cargo_toml_content.contains("[[bin]]"));
 
     // Verify content of main.rs
@@ -194,6 +194,8 @@ fn test_generate_unified_aws_provider() {
     assert!(lib_rs_content.contains("pub struct AwsProvider"));
     assert!(lib_rs_content.contains("impl ProviderService for AwsProvider"));
     assert!(lib_rs_content.contains("fn schema(&self)"));
+    assert!(lib_rs_content.contains("PROTOCOL_VERSION"));
+    assert!(lib_rs_content.contains("SDK_PROTOCOL_VERSION"));
 
     // Clean up
     fs::remove_dir_all(&output_dir).expect("Failed to clean up test directory");
