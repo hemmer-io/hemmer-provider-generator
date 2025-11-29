@@ -25,6 +25,137 @@ use tracing::{debug, error, info, warn};
 // Re-export protocol version constants for consumers
 pub use hemmer_provider_sdk::{PROTOCOL_VERSION as SDK_PROTOCOL_VERSION, MIN_PROTOCOL_VERSION as SDK_MIN_PROTOCOL_VERSION};
 
+{% if provider == "Aws" %}
+// AWS SDK error handling
+use {{ provider | config_crate(service_name=service_name) }}::error::ProvideErrorMetadata;
+{% endif %}
+
+/// SDK error categories for mapping to gRPC status codes
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SdkErrorKind {
+    /// Resource was not found
+    NotFound,
+    /// Resource already exists (create conflict)
+    AlreadyExists,
+    /// Permission denied (authentication/authorization failure)
+    PermissionDenied,
+    /// Invalid argument provided
+    InvalidArgument,
+    /// Operation failed due to current state (precondition not met)
+    FailedPrecondition,
+    /// Quota or rate limit exceeded
+    ResourceExhausted,
+    /// Service temporarily unavailable
+    Unavailable,
+    /// Operation timed out
+    DeadlineExceeded,
+    /// Operation not implemented
+    Unimplemented,
+    /// Unknown or unclassified error
+    Unknown,
+}
+
+{% if provider == "Aws" %}
+/// Categorize AWS SDK error codes into SdkErrorKind
+fn categorize_aws_error_code(code: Option<&str>) -> SdkErrorKind {
+    match code {
+        // Not Found errors
+        Some(c) if c.contains("NotFound") || c.contains("NoSuch") || c == "ResourceNotFoundException" => {
+            SdkErrorKind::NotFound
+        }
+        // Already Exists errors
+        Some(c) if c.contains("AlreadyExists") || c.contains("AlreadyOwned") || c == "EntityAlreadyExists" || c == "DuplicateRequest" => {
+            SdkErrorKind::AlreadyExists
+        }
+        // Permission Denied errors
+        Some(c) if c.contains("AccessDenied") || c.contains("Unauthorized") || c == "InvalidAccessKeyId" || c == "SignatureDoesNotMatch" || c == "ExpiredToken" || c == "InvalidToken" => {
+            SdkErrorKind::PermissionDenied
+        }
+        // Invalid Argument errors
+        Some(c) if c.contains("Invalid") || c.contains("Malformed") || c == "ValidationException" || c == "ValidationError" || c.contains("ParameterValue") => {
+            SdkErrorKind::InvalidArgument
+        }
+        // Failed Precondition errors
+        Some(c) if c.contains("NotEmpty") || c.contains("InUse") || c.contains("Conflict") || c == "OperationAborted" || c == "PreconditionFailed" || c == "ConditionalCheckFailedException" => {
+            SdkErrorKind::FailedPrecondition
+        }
+        // Resource Exhausted errors
+        Some(c) if c.contains("LimitExceeded") || c.contains("TooMany") || c == "SlowDown" || c == "Throttling" || c == "ThrottlingException" || c == "ProvisionedThroughputExceededException" || c == "RequestLimitExceeded" => {
+            SdkErrorKind::ResourceExhausted
+        }
+        // Unavailable errors
+        Some(c) if c == "ServiceUnavailable" || c == "InternalError" || c == "InternalFailure" || c.contains("ServiceException") => {
+            SdkErrorKind::Unavailable
+        }
+        // Deadline Exceeded errors
+        Some(c) if c == "RequestTimeout" || c == "RequestExpired" || c.contains("Timeout") => {
+            SdkErrorKind::DeadlineExceeded
+        }
+        // Unimplemented errors
+        Some(c) if c == "NotImplemented" || c == "UnsupportedOperation" => {
+            SdkErrorKind::Unimplemented
+        }
+        // Unknown/fallback
+        _ => SdkErrorKind::Unknown,
+    }
+}
+{% endif %}
+
+/// Convert SdkErrorKind to appropriate tonic::Status
+fn sdk_error_kind_to_status(kind: SdkErrorKind, message: String) -> tonic::Status {
+    match kind {
+        SdkErrorKind::NotFound => tonic::Status::not_found(message),
+        SdkErrorKind::AlreadyExists => tonic::Status::already_exists(message),
+        SdkErrorKind::PermissionDenied => tonic::Status::permission_denied(message),
+        SdkErrorKind::InvalidArgument => tonic::Status::invalid_argument(message),
+        SdkErrorKind::FailedPrecondition => tonic::Status::failed_precondition(message),
+        SdkErrorKind::ResourceExhausted => tonic::Status::resource_exhausted(message),
+        SdkErrorKind::Unavailable => tonic::Status::unavailable(message),
+        SdkErrorKind::DeadlineExceeded => tonic::Status::deadline_exceeded(message),
+        SdkErrorKind::Unimplemented => tonic::Status::unimplemented(message),
+        SdkErrorKind::Unknown => tonic::Status::internal(message),
+    }
+}
+
+{% if provider == "Aws" %}
+/// Convert AWS SDK error to tonic::Status with appropriate status code
+fn aws_sdk_error_to_status<E, R>(error: &aws_smithy_runtime_api::client::result::SdkError<E, R>) -> tonic::Status
+where
+    E: std::fmt::Debug + ProvideErrorMetadata,
+{
+    let message = format!("{:?}", error);
+
+    match error {
+        aws_smithy_runtime_api::client::result::SdkError::ServiceError(service_err) => {
+            let code = service_err.err().code();
+            let kind = categorize_aws_error_code(code);
+            debug!("AWS error code: {:?} -> {:?}", code, kind);
+            sdk_error_kind_to_status(kind, message)
+        }
+        aws_smithy_runtime_api::client::result::SdkError::TimeoutError(_) => {
+            tonic::Status::deadline_exceeded(message)
+        }
+        aws_smithy_runtime_api::client::result::SdkError::DispatchFailure(_) => {
+            tonic::Status::unavailable(message)
+        }
+        aws_smithy_runtime_api::client::result::SdkError::ResponseError(_) => {
+            tonic::Status::internal(message)
+        }
+        aws_smithy_runtime_api::client::result::SdkError::ConstructionFailure(_) => {
+            tonic::Status::invalid_argument(message)
+        }
+        _ => tonic::Status::internal(message),
+    }
+}
+{% else %}
+/// Convert generic SDK error to tonic::Status
+fn sdk_error_to_status<E: std::fmt::Debug>(error: &E) -> tonic::Status {
+    // For non-AWS providers, default to internal error
+    // Provider-specific error mapping can be added here
+    tonic::Status::internal(format!("{:?}", error))
+}
+{% endif %}
+
 /// Provider error types
 #[derive(Error, Debug)]
 pub enum ProviderError {
@@ -368,10 +499,11 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
                     }
                     Err(e) => {
                         error!("Failed to create {{ resource.name }}: {:?}", e);
-                        Err(tonic::Status::internal(format!(
-                            "Failed to create {{ resource.name }}: {}",
-                            e
-                        )))
+{% if provider == "Aws" %}
+                        Err(aws_sdk_error_to_status(&e))
+{% else %}
+                        Err(sdk_error_to_status(&e))
+{% endif %}
                     }
                 }
 {% else %}
@@ -512,10 +644,11 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
                     }
                     Err(e) => {
                         error!("Failed to update {{ resource.name }}: {:?}", e);
-                        Err(tonic::Status::internal(format!(
-                            "Failed to update {{ resource.name }}: {}",
-                            e
-                        )))
+{% if provider == "Aws" %}
+                        Err(aws_sdk_error_to_status(&e))
+{% else %}
+                        Err(sdk_error_to_status(&e))
+{% endif %}
                     }
                 }
 {% else %}
@@ -569,10 +702,11 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
                     }
                     Err(e) => {
                         error!("Failed to delete {{ resource.name }}: {:?}", e);
-                        Err(tonic::Status::internal(format!(
-                            "Failed to delete {{ resource.name }}: {}",
-                            e
-                        )))
+{% if provider == "Aws" %}
+                        Err(aws_sdk_error_to_status(&e))
+{% else %}
+                        Err(sdk_error_to_status(&e))
+{% endif %}
                     }
                 }
 {% else %}
