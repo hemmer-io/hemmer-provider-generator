@@ -1,7 +1,9 @@
 //! Code and manifest generation for Hemmer providers
 //!
 //! This crate transforms parsed SDK definitions into provider artifacts
-//! including KCL manifests, Rust code, and tests.
+//! including JCL manifests, Rust code, and tests.
+//!
+//! Generated providers use the `hemmer-provider-sdk` for gRPC communication.
 
 mod templates;
 
@@ -15,9 +17,10 @@ use tera::Tera;
 /// Provider generator
 ///
 /// Transforms ServiceDefinition IR into complete provider package:
-/// - provider.k (KCL manifest)
-/// - Rust source code
-/// - Tests
+/// - provider.jcf (JCL manifest)
+/// - src/main.rs (binary entry point)
+/// - src/lib.rs (ProviderService implementation)
+/// - src/resources/*.rs (resource handlers)
 /// - Cargo.toml
 /// - README.md
 pub struct ProviderGenerator {
@@ -50,8 +53,9 @@ impl ProviderGenerator {
         })?;
 
         // Generate all artifacts
-        self.generate_provider_k(output_dir)?;
+        self.generate_provider_jcf(output_dir)?;
         self.generate_cargo_toml(output_dir)?;
+        self.generate_main_rs(&src_dir)?;
         self.generate_lib_rs(&src_dir)?;
         self.generate_resources(&resources_dir)?;
         self.generate_readme(output_dir)?;
@@ -59,18 +63,33 @@ impl ProviderGenerator {
         Ok(())
     }
 
-    /// Generate provider.k (KCL manifest)
-    fn generate_provider_k(&self, output_dir: &Path) -> Result<()> {
+    /// Generate provider.jcf (JCL manifest)
+    fn generate_provider_jcf(&self, output_dir: &Path) -> Result<()> {
         let context = self.create_context();
         let rendered = self
             .tera
-            .render("provider.k", &context)
+            .render("provider.jcf", &context)
             .map_err(|e| GeneratorError::Generation(format!("Template error: {:?}", e)))?;
 
-        let output_path = output_dir.join("provider.k");
+        let output_path = output_dir.join("provider.jcf");
         fs::write(output_path, rendered).map_err(|e| {
-            GeneratorError::Generation(format!("Failed to write provider.k: {}", e))
+            GeneratorError::Generation(format!("Failed to write provider.jcf: {}", e))
         })?;
+
+        Ok(())
+    }
+
+    /// Generate main.rs (binary entry point)
+    fn generate_main_rs(&self, src_dir: &Path) -> Result<()> {
+        let context = self.create_context();
+        let rendered = self
+            .tera
+            .render("main.rs", &context)
+            .map_err(|e| GeneratorError::Generation(format!("Template error: {:?}", e)))?;
+
+        let output_path = src_dir.join("main.rs");
+        fs::write(output_path, rendered)
+            .map_err(|e| GeneratorError::Generation(format!("Failed to write main.rs: {}", e)))?;
 
         Ok(())
     }
@@ -185,9 +204,11 @@ pub fn generate_provider(service_def: ServiceDefinition, output_path: &str) -> R
 /// Unified provider generator for multi-service providers
 ///
 /// Transforms ProviderDefinition IR into complete unified provider package:
-/// - provider.k (unified KCL manifest)
-/// - Rust source code (multi-service structure)
-/// - Tests
+/// - provider.jcf (JCL manifest)
+/// - src/main.rs (binary entry point)
+/// - src/lib.rs (ProviderService implementation)
+/// - src/{service}/mod.rs (service handlers)
+/// - src/{service}/resources/*.rs (resource handlers)
 /// - Cargo.toml
 /// - README.md
 pub struct UnifiedProviderGenerator {
@@ -215,8 +236,9 @@ impl UnifiedProviderGenerator {
         })?;
 
         // Generate top-level artifacts
-        self.generate_unified_provider_k(output_dir)?;
+        self.generate_unified_provider_jcf(output_dir)?;
         self.generate_unified_cargo_toml(output_dir)?;
+        self.generate_unified_main_rs(&src_dir)?;
         self.generate_unified_lib_rs(&src_dir)?;
         self.generate_unified_readme(output_dir)?;
         self.generate_release_workflow(output_dir)?;
@@ -247,18 +269,33 @@ impl UnifiedProviderGenerator {
         Ok(())
     }
 
-    /// Generate unified provider.k (KCL manifest)
-    fn generate_unified_provider_k(&self, output_dir: &Path) -> Result<()> {
+    /// Generate unified provider.jcf (JCL manifest)
+    fn generate_unified_provider_jcf(&self, output_dir: &Path) -> Result<()> {
         let context = self.create_unified_context();
         let rendered = self
             .tera
-            .render("unified_provider.k", &context)
+            .render("unified_provider.jcf", &context)
             .map_err(|e| GeneratorError::Generation(format!("Template error: {:?}", e)))?;
 
-        let output_path = output_dir.join("provider.k");
+        let output_path = output_dir.join("provider.jcf");
         fs::write(output_path, rendered).map_err(|e| {
-            GeneratorError::Generation(format!("Failed to write provider.k: {}", e))
+            GeneratorError::Generation(format!("Failed to write provider.jcf: {}", e))
         })?;
+
+        Ok(())
+    }
+
+    /// Generate unified main.rs (binary entry point)
+    fn generate_unified_main_rs(&self, src_dir: &Path) -> Result<()> {
+        let context = self.create_unified_context();
+        let rendered = self
+            .tera
+            .render("unified_main.rs", &context)
+            .map_err(|e| GeneratorError::Generation(format!("Template error: {:?}", e)))?;
+
+        let output_path = src_dir.join("main.rs");
+        fs::write(output_path, rendered)
+            .map_err(|e| GeneratorError::Generation(format!("Failed to write main.rs: {}", e)))?;
 
         Ok(())
     }

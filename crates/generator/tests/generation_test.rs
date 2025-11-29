@@ -74,23 +74,94 @@ fn test_generate_s3_provider() {
     assert!(result.is_ok(), "Generation failed: {:?}", result);
 
     // Check that files were created
-    assert!(output_path.join("provider.k").exists());
-    assert!(output_path.join("Cargo.toml").exists());
-    assert!(output_path.join("README.md").exists());
-    assert!(output_path.join("src/lib.rs").exists());
-    assert!(output_path.join("src/resources/mod.rs").exists());
-    assert!(output_path.join("src/resources/bucket.rs").exists());
+    assert!(
+        output_path.join("provider.jcf").exists(),
+        "provider.jcf should exist"
+    );
+    assert!(
+        output_path.join("Cargo.toml").exists(),
+        "Cargo.toml should exist"
+    );
+    assert!(
+        output_path.join("README.md").exists(),
+        "README.md should exist"
+    );
+    assert!(
+        output_path.join("src/main.rs").exists(),
+        "src/main.rs should exist"
+    );
+    assert!(
+        output_path.join("src/lib.rs").exists(),
+        "src/lib.rs should exist"
+    );
+    assert!(
+        output_path.join("src/resources/mod.rs").exists(),
+        "src/resources/mod.rs should exist"
+    );
+    assert!(
+        output_path.join("src/resources/bucket.rs").exists(),
+        "src/resources/bucket.rs should exist"
+    );
 
-    // Check provider.k content
-    let provider_k = std::fs::read_to_string(output_path.join("provider.k")).unwrap();
-    assert!(provider_k.contains("S3Provider"));
-    assert!(provider_k.contains("Bucket"));
-    assert!(provider_k.contains("bucket: str"));
+    // Check provider.jcf content
+    let provider_jcf = std::fs::read_to_string(output_path.join("provider.jcf")).unwrap();
+    assert!(
+        provider_jcf.contains("name: \"s3\""),
+        "Should contain provider name"
+    );
+    assert!(
+        provider_jcf.contains("protocol: \"grpc\""),
+        "Should specify gRPC protocol"
+    );
+    assert!(
+        provider_jcf.contains("bucket:"),
+        "Should contain bucket resource"
+    );
 
     // Check Cargo.toml content
     let cargo_toml = std::fs::read_to_string(output_path.join("Cargo.toml")).unwrap();
-    assert!(cargo_toml.contains("hemmer-s3-provider"));
-    assert!(cargo_toml.contains("aws-sdk-s3"));
+    assert!(
+        cargo_toml.contains("hemmer-s3-provider"),
+        "Should have correct package name"
+    );
+    assert!(
+        cargo_toml.contains("aws-sdk-s3"),
+        "Should have AWS SDK dependency"
+    );
+    assert!(
+        cargo_toml.contains("hemmer-provider-sdk"),
+        "Should have Hemmer SDK dependency"
+    );
+    assert!(
+        cargo_toml.contains("[[bin]]"),
+        "Should define binary target"
+    );
+
+    // Check main.rs content
+    let main_rs = std::fs::read_to_string(output_path.join("src/main.rs")).unwrap();
+    assert!(
+        main_rs.contains("hemmer_provider_sdk::serve"),
+        "Should use SDK serve function"
+    );
+    assert!(
+        main_rs.contains("S3Provider"),
+        "Should reference provider struct"
+    );
+
+    // Check lib.rs content
+    let lib_rs = std::fs::read_to_string(output_path.join("src/lib.rs")).unwrap();
+    assert!(
+        lib_rs.contains("impl ProviderService for"),
+        "Should implement ProviderService trait"
+    );
+    assert!(
+        lib_rs.contains("fn schema(&self)"),
+        "Should implement schema method"
+    );
+    assert!(
+        lib_rs.contains("async fn create"),
+        "Should implement create method"
+    );
 
     println!("✅ Provider generated successfully to: {:?}", output_path);
 }

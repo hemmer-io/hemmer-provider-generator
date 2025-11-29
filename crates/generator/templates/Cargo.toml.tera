@@ -2,12 +2,21 @@
 name = "hemmer-{{ service_name }}-provider"
 version = "0.1.0"
 edition = "2021"
+description = "Hemmer provider for {{ service_name }}"
+
+[lib]
+name = "hemmer_{{ service_name }}_provider"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hemmer-{{ service_name }}-provider"
+path = "src/main.rs"
 
 [dependencies]
-# Hemmer provider runtime (placeholder)
-# hemmer-runtime = "0.1"
+# Hemmer provider SDK
+hemmer-provider-sdk = "0.1"
 
-# SDK dependencies
+# Cloud SDK dependencies
 {% if provider == "Aws" %}aws-sdk-{{ service_name }} = "1"
 aws-config = "1"
 {% elif provider == "Gcp" %}# GCP SDK dependencies
@@ -16,10 +25,11 @@ aws-config = "1"
 
 # Standard dependencies
 anyhow = "1"
-thiserror = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+thiserror = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
 
 [dev-dependencies]
 tokio-test = "0.4"

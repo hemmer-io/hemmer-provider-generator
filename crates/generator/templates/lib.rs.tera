@@ -4,7 +4,14 @@
 
 pub mod resources;
 
+use hemmer_provider_sdk::{
+    async_trait, serde_json, tonic,
+    ProviderService, ProviderSchema, Schema, Block, Attribute, AttributeType, AttributeFlags,
+    PlanResult, AttributeChange, ImportedResource, ProviderMetadata, ServerCapabilities,
+};
+use std::collections::HashMap;
 use thiserror::Error;
+use tracing::{debug, error, info};
 
 /// Provider error types
 #[derive(Error, Debug)]
@@ -18,6 +25,12 @@ pub enum ProviderError {
     #[error("Validation error: {0}")]
     ValidationError(String),
 
+    #[error("Configuration error: {0}")]
+    ConfigurationError(String),
+
+    #[error("Unknown resource type: {0}")]
+    UnknownResource(String),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -25,46 +38,291 @@ pub enum ProviderError {
 /// Result type for provider operations
 pub type Result<T> = std::result::Result<T, ProviderError>;
 
-/// Provider client
+/// {{ service_name | capitalize }} Provider
 pub struct {{ service_name | capitalize }}Provider {
 {% if provider == "Aws" %}
-    client: aws_sdk_{{ service_name }}::Client,
+    client: Option<aws_sdk_{{ service_name }}::Client>,
 {% elif provider == "Gcp" %}
-    // GCP client
+    // GCP client placeholder
+    _configured: bool,
 {% elif provider == "Azure" %}
-    // Azure client
+    // Azure client placeholder
+    _configured: bool,
+{% else %}
+    _configured: bool,
 {% endif %}
 }
 
 impl {{ service_name | capitalize }}Provider {
-    /// Create a new provider instance
-    pub async fn new() -> Result<Self> {
+    /// Create a new provider instance (unconfigured)
+    pub fn new() -> Self {
+        Self {
 {% if provider == "Aws" %}
-        let config = aws_config::load_from_env().await;
-        let client = aws_sdk_{{ service_name }}::Client::new(&config);
+            client: None,
+{% else %}
+            _configured: false,
 {% endif %}
-        Ok(Self {
+        }
+    }
+
+    /// Build the provider schema
+    fn build_schema() -> ProviderSchema {
+        let mut resources = HashMap::new();
+{% for resource in resources %}
+
+        // {{ resource.name | capitalize }} resource schema
+        let mut {{ resource.name }}_attrs = HashMap::new();
+{% for field in resource.fields %}
+        {{ resource.name }}_attrs.insert(
+            "{{ field.name }}".to_string(),
+            Attribute::new(
+                {{ field.field_type | sdk_attr_type }},
+{% if field.required %}
+                AttributeFlags::required(),
+{% else %}
+                AttributeFlags::optional(),
+{% endif %}
+            ){% if field.sensitive %}.sensitive(){% endif %}{% if field.description %}.with_description("{{ field.description }}"){% endif %}{% if field.immutable %}.with_force_new(){% endif %},
+        );
+{% endfor %}
+{% for output in resource.outputs %}
+        {{ resource.name }}_attrs.insert(
+            "{{ output.name }}".to_string(),
+            Attribute::new(
+                {{ output.field_type | sdk_attr_type }},
+                AttributeFlags::computed(),
+            ){% if output.description %}.with_description("{{ output.description }}"){% endif %},
+        );
+{% endfor %}
+        resources.insert(
+            "{{ resource.name }}".to_string(),
+            Schema {
+                version: 1,
+                block: Block {
+                    attributes: {{ resource.name }}_attrs,
+                    blocks: HashMap::new(),
+                },
+            },
+        );
+{% endfor %}
+
+        // Provider config schema
+        let mut config_attrs = HashMap::new();
 {% if provider == "Aws" %}
-            client,
+        config_attrs.insert(
+            "region".to_string(),
+            Attribute::optional_string().with_description("AWS region to use"),
+        );
+        config_attrs.insert(
+            "profile".to_string(),
+            Attribute::optional_string().with_description("AWS profile to use"),
+        );
+{% elif provider == "Gcp" %}
+        config_attrs.insert(
+            "project".to_string(),
+            Attribute::optional_string().with_description("GCP project ID"),
+        );
+        config_attrs.insert(
+            "region".to_string(),
+            Attribute::optional_string().with_description("GCP region to use"),
+        );
+{% elif provider == "Azure" %}
+        config_attrs.insert(
+            "subscription_id".to_string(),
+            Attribute::optional_string().with_description("Azure subscription ID"),
+        );
+        config_attrs.insert(
+            "tenant_id".to_string(),
+            Attribute::optional_string().with_description("Azure tenant ID"),
+        );
 {% endif %}
+
+        ProviderSchema {
+            provider: Schema {
+                version: 1,
+                block: Block {
+                    attributes: config_attrs,
+                    blocks: HashMap::new(),
+                },
+            },
+            resources,
+            data_sources: HashMap::new(),
+        }
+    }
+}
+
+impl Default for {{ service_name | capitalize }}Provider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl ProviderService for {{ service_name | capitalize }}Provider {
+    fn schema(&self) -> ProviderSchema {
+        Self::build_schema()
+    }
+
+    async fn configure(
+        &self,
+        config: serde_json::Value,
+    ) -> std::result::Result<Vec<tonic::Status>, tonic::Status> {
+        info!("Configuring {{ service_name }} provider");
+        debug!("Config: {:?}", config);
+
+{% if provider == "Aws" %}
+        // Load AWS config from environment, optionally using provided region/profile
+        let mut config_loader = aws_config::from_env();
+
+        if let Some(region) = config.get("region").and_then(|v| v.as_str()) {
+            config_loader = config_loader.region(aws_config::Region::new(region.to_string()));
+        }
+
+        if let Some(profile) = config.get("profile").and_then(|v| v.as_str()) {
+            config_loader = config_loader.profile_name(profile);
+        }
+
+        let sdk_config = config_loader.load().await;
+        let client = aws_sdk_{{ service_name }}::Client::new(&sdk_config);
+
+        // Store client (requires interior mutability in real implementation)
+        // For now, we'll reconstruct on each call
+        let _ = client;
+{% endif %}
+
+        Ok(vec![])
+    }
+
+    async fn plan(
+        &self,
+        resource_type: &str,
+        _prior_state: Option<serde_json::Value>,
+        proposed_state: serde_json::Value,
+        _config: serde_json::Value,
+    ) -> std::result::Result<PlanResult, tonic::Status> {
+        debug!("Planning {} resource", resource_type);
+
+        // For now, return the proposed state as the planned state
+        // Real implementation would diff prior vs proposed
+        Ok(PlanResult {
+            planned_state: proposed_state,
+            changes: vec![],
+            requires_replace: false,
         })
     }
 
+    async fn create(
+        &self,
+        resource_type: &str,
+        planned_state: serde_json::Value,
+        _config: serde_json::Value,
+    ) -> std::result::Result<serde_json::Value, tonic::Status> {
+        info!("Creating {} resource", resource_type);
+
+        match resource_type {
 {% for resource in resources %}
-    /// Get {{ resource.name }} resource handler
-    pub fn {{ resource.name }}(&self) -> resources::{{ resource.name | capitalize }}<'_> {
-        resources::{{ resource.name | capitalize }}::new(self)
-    }
+            "{{ resource.name }}" => {
+                // TODO: Implement {{ resource.name }} creation using SDK
+                debug!("Creating {{ resource.name }}: {:?}", planned_state);
+                Ok(planned_state)
+            }
 {% endfor %}
+            _ => {
+                error!("Unknown resource type: {}", resource_type);
+                Err(tonic::Status::not_found(format!(
+                    "Unknown resource type: {}",
+                    resource_type
+                )))
+            }
+        }
+    }
+
+    async fn read(
+        &self,
+        resource_type: &str,
+        current_state: serde_json::Value,
+        _config: serde_json::Value,
+    ) -> std::result::Result<serde_json::Value, tonic::Status> {
+        debug!("Reading {} resource", resource_type);
+
+        match resource_type {
+{% for resource in resources %}
+            "{{ resource.name }}" => {
+                // TODO: Implement {{ resource.name }} read using SDK
+                Ok(current_state)
+            }
+{% endfor %}
+            _ => Err(tonic::Status::not_found(format!(
+                "Unknown resource type: {}",
+                resource_type
+            ))),
+        }
+    }
+
+    async fn update(
+        &self,
+        resource_type: &str,
+        _prior_state: serde_json::Value,
+        planned_state: serde_json::Value,
+        _config: serde_json::Value,
+    ) -> std::result::Result<serde_json::Value, tonic::Status> {
+        info!("Updating {} resource", resource_type);
+
+        match resource_type {
+{% for resource in resources %}
+            "{{ resource.name }}" => {
+                // TODO: Implement {{ resource.name }} update using SDK
+                Ok(planned_state)
+            }
+{% endfor %}
+            _ => Err(tonic::Status::not_found(format!(
+                "Unknown resource type: {}",
+                resource_type
+            ))),
+        }
+    }
+
+    async fn delete(
+        &self,
+        resource_type: &str,
+        current_state: serde_json::Value,
+        _config: serde_json::Value,
+    ) -> std::result::Result<(), tonic::Status> {
+        info!("Deleting {} resource", resource_type);
+
+        match resource_type {
+{% for resource in resources %}
+            "{{ resource.name }}" => {
+                // TODO: Implement {{ resource.name }} deletion using SDK
+                debug!("Deleting {{ resource.name }}: {:?}", current_state);
+                Ok(())
+            }
+{% endfor %}
+            _ => Err(tonic::Status::not_found(format!(
+                "Unknown resource type: {}",
+                resource_type
+            ))),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_provider_creation() {
-        // Provider creation test
-        // Note: This will fail without proper credentials
+    #[test]
+    fn test_provider_creation() {
+        let provider = {{ service_name | capitalize }}Provider::new();
+        let schema = provider.schema();
+        assert!(!schema.resources.is_empty());
+    }
+
+    #[test]
+    fn test_schema_has_resources() {
+        let provider = {{ service_name | capitalize }}Provider::new();
+        let schema = provider.schema();
+{% for resource in resources %}
+        assert!(schema.resources.contains_key("{{ resource.name }}"));
+{% endfor %}
     }
 }

@@ -10,6 +10,8 @@ pub fn load_templates() -> Result<Tera> {
 
     // Register custom filters
     tera.register_filter("kcl_type", kcl_type_filter);
+    tera.register_filter("jcl_type", jcl_type_filter);
+    tera.register_filter("sdk_attr_type", sdk_attr_type_filter);
     tera.register_filter("rust_type", rust_type_filter);
     tera.register_filter("capitalize", capitalize_filter);
 
@@ -48,6 +50,19 @@ pub fn load_templates() -> Result<Tera> {
             GeneratorError::Generation(format!("Failed to load README.md template: {}", e))
         })?;
 
+    tera.add_raw_template("main.rs", include_str!("../templates/main.rs.tera"))
+        .map_err(|e| {
+            GeneratorError::Generation(format!("Failed to load main.rs template: {}", e))
+        })?;
+
+    tera.add_raw_template(
+        "provider.jcf",
+        include_str!("../templates/provider.jcf.tera"),
+    )
+    .map_err(|e| {
+        GeneratorError::Generation(format!("Failed to load provider.jcf template: {}", e))
+    })?;
+
     Ok(tera)
 }
 
@@ -57,6 +72,8 @@ pub fn load_unified_templates() -> Result<Tera> {
 
     // Register custom filters
     tera.register_filter("kcl_type", kcl_type_filter);
+    tera.register_filter("jcl_type", jcl_type_filter);
+    tera.register_filter("sdk_attr_type", sdk_attr_type_filter);
     tera.register_filter("rust_type", rust_type_filter);
     tera.register_filter("capitalize", capitalize_filter);
     tera.register_filter("lower", lower_filter);
@@ -66,11 +83,22 @@ pub fn load_unified_templates() -> Result<Tera> {
 
     // Add unified templates
     tera.add_raw_template(
-        "unified_provider.k",
-        include_str!("../templates/unified_provider.k.tera"),
+        "unified_main.rs",
+        include_str!("../templates/unified_main.rs.tera"),
     )
     .map_err(|e| {
-        GeneratorError::Generation(format!("Failed to load unified_provider.k template: {}", e))
+        GeneratorError::Generation(format!("Failed to load unified_main.rs template: {}", e))
+    })?;
+
+    tera.add_raw_template(
+        "unified_provider.jcf",
+        include_str!("../templates/unified_provider.jcf.tera"),
+    )
+    .map_err(|e| {
+        GeneratorError::Generation(format!(
+            "Failed to load unified_provider.jcf template: {}",
+            e
+        ))
     })?;
 
     tera.add_raw_template(
@@ -344,4 +372,87 @@ fn sanitize_identifier_part_filter(
         .ok_or_else(|| tera::Error::msg("sanitize_identifier_part filter expects a string"))?;
 
     Ok(Value::String(sanitize_identifier_part(s)))
+}
+
+/// Filter to convert FieldType to JCL type string
+/// Usage: {{ field.field_type | jcl_type }}
+/// Examples:
+///   - String -> "string"
+///   - Integer -> "int"
+///   - Float -> "float"
+///   - Boolean -> "bool"
+///   - List(String) -> "[string]"
+///   - Map(String, Integer) -> "{string: int}"
+fn jcl_type_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
+    use hemmer_provider_generator_common::FieldType;
+
+    let field_type: FieldType = serde_json::from_value(value.clone())
+        .map_err(|e| tera::Error::msg(format!("Failed to deserialize FieldType: {}", e)))?;
+
+    let jcl_type = field_type_to_jcl(&field_type);
+    Ok(Value::String(jcl_type))
+}
+
+/// Convert FieldType to JCL type string
+fn field_type_to_jcl(field_type: &hemmer_provider_generator_common::FieldType) -> String {
+    use hemmer_provider_generator_common::FieldType;
+
+    match field_type {
+        FieldType::String => "string".to_string(),
+        FieldType::Integer => "int".to_string(),
+        FieldType::Float => "float".to_string(),
+        FieldType::Boolean => "bool".to_string(),
+        FieldType::DateTime => "string".to_string(), // DateTime represented as string in JCL
+        FieldType::List(inner) => format!("[{}]", field_type_to_jcl(inner)),
+        FieldType::Map(key, value) => {
+            format!(
+                "{{{}: {}}}",
+                field_type_to_jcl(key),
+                field_type_to_jcl(value)
+            )
+        }
+        FieldType::Enum(_) => "string".to_string(), // Enums represented as strings in JCL
+        FieldType::Object(_) => "object".to_string(), // Complex objects
+    }
+}
+
+/// Filter to convert FieldType to SDK AttributeType constructor
+/// Usage: {{ field.field_type | sdk_attr_type }}
+/// Examples:
+///   - String -> AttributeType::String
+///   - Integer -> AttributeType::Int64
+///   - Float -> AttributeType::Float64
+///   - Boolean -> AttributeType::Bool
+///   - List(String) -> AttributeType::list(AttributeType::String)
+///   - Map(String, Integer) -> AttributeType::map(AttributeType::Int64)
+fn sdk_attr_type_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
+    use hemmer_provider_generator_common::FieldType;
+
+    let field_type: FieldType = serde_json::from_value(value.clone())
+        .map_err(|e| tera::Error::msg(format!("Failed to deserialize FieldType: {}", e)))?;
+
+    let sdk_type = field_type_to_sdk_attr(&field_type);
+    Ok(Value::String(sdk_type))
+}
+
+/// Convert FieldType to SDK AttributeType constructor expression
+fn field_type_to_sdk_attr(field_type: &hemmer_provider_generator_common::FieldType) -> String {
+    use hemmer_provider_generator_common::FieldType;
+
+    match field_type {
+        FieldType::String => "AttributeType::String".to_string(),
+        FieldType::Integer => "AttributeType::Int64".to_string(),
+        FieldType::Float => "AttributeType::Float64".to_string(),
+        FieldType::Boolean => "AttributeType::Bool".to_string(),
+        FieldType::DateTime => "AttributeType::String".to_string(), // DateTime as string
+        FieldType::List(inner) => {
+            format!("AttributeType::list({})", field_type_to_sdk_attr(inner))
+        }
+        FieldType::Map(_key, value) => {
+            // SDK Map type only takes value type (keys are always strings)
+            format!("AttributeType::map({})", field_type_to_sdk_attr(value))
+        }
+        FieldType::Enum(_) => "AttributeType::String".to_string(), // Enums as strings
+        FieldType::Object(_) => "AttributeType::Dynamic".to_string(), // Complex objects as dynamic
+    }
 }

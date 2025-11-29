@@ -2,22 +2,25 @@
 name = "hemmer-{{ provider_name }}-provider"
 version = "0.1.0"
 edition = "2021"
+description = "Hemmer unified provider for {{ provider_name }}"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+name = "hemmer_{{ provider_name }}_provider"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hemmer-{{ provider_name }}-provider"
+path = "src/main.rs"
 
 [dependencies]
-# Hemmer provider runtime
-hemmer-provider = { path = "../../hemmer/crates/hemmer-provider" }
-hemmer-core = { path = "../../hemmer/crates/hemmer-core" }
-async-trait = "0.1"
+# Hemmer provider SDK
+hemmer-provider-sdk = "0.1"
 
-# SDK dependencies for all services
+# Cloud SDK dependencies
 {% if provider == "Kubernetes" %}# Kubernetes SDK dependencies (special case - uses shared kube client)
 kube = { version = "0.87", features = ["runtime", "derive"] }
 k8s-openapi = { version = "0.20", features = ["v1_28"] }
-{% else %}# Cloud provider SDK dependencies
-{% for service in services -%}
+{% else %}{% for service in services -%}
 {%- set dep = provider | sdk_dependency(service_name=service.name) -%}
 {%- if dep != "" %}{{ dep }} = "1"
 {% endif -%}
@@ -26,10 +29,11 @@ k8s-openapi = { version = "0.20", features = ["v1_28"] }
 
 # Standard dependencies
 anyhow = "1"
-thiserror = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+thiserror = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
 
 [dev-dependencies]
 tokio-test = "0.4"
