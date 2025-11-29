@@ -16,6 +16,12 @@ updates:
       include: "scope"
     reviewers:
       - "hemmer-io/engineering"
+    ignore:
+      # rustdoc-types version tracks rustdoc JSON format_version.
+      # Version 0.57 was published before any Rust compiler outputs format 57.
+      # Ignore until Rust nightly actually produces format_version 57.
+      - dependency-name: "rustdoc-types"
+        versions: ["0.57"]
     groups:
       # Group prost ecosystem updates together (they must be updated in sync)
       prost-ecosystem:
