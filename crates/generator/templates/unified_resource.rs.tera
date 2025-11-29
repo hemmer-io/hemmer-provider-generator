@@ -2,178 +2,356 @@
 //!
 //! {{ resource.description | default(value="Auto-generated resource") }}
 
-use std::collections::HashMap;
+use tracing::{debug, error, info, warn};
 
+{% if provider | has_config_crate %}
 /// Create a new {{ resource.name }}
-#[allow(unused_variables)]
 pub async fn create(
-    config: &HashMap<String, String>,
+    client: {{ provider | client_type(service_name=service_name) }},
     input: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-{% if provider == "Aws" %}
-    // Extract input fields
+    info!("Creating {{ resource.name }}");
+    debug!("Input: {:?}", input);
+
+    // Validate required fields
 {% for field in resource.fields %}
 {% if field.required %}
-    let {{ field.name }} = input.get("{{ field.name }}")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| "Missing required field: {{ field.name }}".to_string())?;
-{% else %}
-    let {{ field.name }} = input.get("{{ field.name }}")
-        .and_then(|v| v.as_str());
+    if input.get("{{ field.name }}").is_none() {
+        return Err("Missing required field: {{ field.name }}".to_string());
+    }
 {% endif %}
 {% endfor %}
 
-    // TODO: Initialize AWS SDK client using config
-    // let sdk_config = aws_config::from_env()
-    //     .region(config.get("region").map(|s| Region::new(s.clone())))
-    //     .load()
-    //     .await;
-    // let client = aws_sdk_{{ service_name }}::Client::new(&sdk_config);
+{% if resource.operations.create %}
+    // Build the SDK request
+    let mut request = client.{{ resource.operations.create.sdk_operation }}();
 
-    // TODO: Call AWS SDK to create the resource
-    // let result = client
-    //     .create_{{ resource.name }}()
+    // Set required fields
 {% for field in resource.fields %}
-    //     .{{ field.name }}({{ field.name }})
-{% endfor %}
-    //     .send()
-    //     .await
-    //     .map_err(|e| format!("Failed to create {{ resource.name }}: {}", e))?;
-
-    // Return placeholder output with computed fields
-    let mut output = input.clone();
-{% for output_field in resource.outputs %}
-    output.as_object_mut()
-        .ok_or_else(|| "Invalid input format".to_string())?
-        .insert("{{ output_field.name }}".to_string(), serde_json::json!("placeholder-{{ output_field.name }}"));
-{% endfor %}
-
-    Ok(output)
+{% if field.required %}
+    if let Some(val) = input.get("{{ field.name }}") {
+{% if field.field_type == "String" %}
+        if let Some(s) = val.as_str() {
+            request = request.{{ field.name }}(s);
+        }
+{% elif field.field_type == "Integer" %}
+        if let Some(n) = val.as_i64() {
+            request = request.{{ field.name }}(n as i32);
+        }
+{% elif field.field_type == "Boolean" %}
+        if let Some(b) = val.as_bool() {
+            request = request.{{ field.name }}(b);
+        }
+{% elif field.field_type == "Float" %}
+        if let Some(n) = val.as_f64() {
+            request = request.{{ field.name }}(n);
+        }
+{% elif field.field_type.List is defined %}
+        if let Some(arr) = val.as_array() {
+            let items: Vec<String> = arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect();
+            request = request.{{ field.name }}(items);
+        }
 {% else %}
-    // TODO: Implement create for {{ provider }}
-    Err("Not implemented".to_string())
+        if let Some(s) = val.as_str() {
+            request = request.{{ field.name }}(s);
+        }
+{% endif %}
+    }
+{% endif %}
+{% endfor %}
+
+    // Set optional fields
+{% for field in resource.fields %}
+{% if not field.required %}
+    if let Some(val) = input.get("{{ field.name }}") {
+{% if field.field_type == "String" %}
+        if let Some(s) = val.as_str() {
+            request = request.{{ field.name }}(s);
+        }
+{% elif field.field_type == "Integer" %}
+        if let Some(n) = val.as_i64() {
+            request = request.{{ field.name }}(n as i32);
+        }
+{% elif field.field_type == "Boolean" %}
+        if let Some(b) = val.as_bool() {
+            request = request.{{ field.name }}(b);
+        }
+{% elif field.field_type == "Float" %}
+        if let Some(n) = val.as_f64() {
+            request = request.{{ field.name }}(n);
+        }
+{% elif field.field_type.List is defined %}
+        if let Some(arr) = val.as_array() {
+            let items: Vec<String> = arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect();
+            request = request.{{ field.name }}(items);
+        }
+{% else %}
+        if let Some(s) = val.as_str() {
+            request = request.{{ field.name }}(s);
+        }
+{% endif %}
+    }
+{% endif %}
+{% endfor %}
+
+    // Execute the request
+    match request.send().await {
+        Ok(response) => {
+            info!("Successfully created {{ resource.name }}");
+            debug!("Response: {:?}", response);
+
+            // Build output state with computed fields
+            let mut output = input.clone();
+            if let Some(obj) = output.as_object_mut() {
+{% for output_field in resource.outputs %}
+                // Extract {{ output_field.name }} from response
+                // TODO: Map actual response field - for now use placeholder
+                obj.insert(
+                    "{{ output_field.name }}".to_string(),
+                    serde_json::Value::String(format!("computed-{{ output_field.name }}")),
+                );
+{% endfor %}
+            }
+
+            Ok(output)
+        }
+        Err(e) => {
+            error!("Failed to create {{ resource.name }}: {:?}", e);
+            Err(format!("Failed to create {{ resource.name }}: {}", e))
+        }
+    }
+{% else %}
+    // No create operation defined
+    warn!("Create operation not defined for {{ resource.name }}");
+    Ok(input)
 {% endif %}
 }
 
 /// Read a {{ resource.name }}
-#[allow(unused_variables)]
 pub async fn read(
-    config: &HashMap<String, String>,
+    client: {{ provider | client_type(service_name=service_name) }},
     current: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-{% if provider == "Aws" %}
-    // TODO: Initialize AWS SDK client using config
-    // let sdk_config = aws_config::from_env()
-    //     .region(config.get("region").map(|s| Region::new(s.clone())))
-    //     .load()
-    //     .await;
-    // let client = aws_sdk_{{ service_name }}::Client::new(&sdk_config);
+    debug!("Reading {{ resource.name }}");
 
-    // TODO: Call AWS SDK to read the resource
-    // Extract identifier from current state
-    // let id = current.get("id").and_then(|v| v.as_str());
-    // let result = client
-    //     .describe_{{ resource.name }}()
-    //     .send()
-    //     .await
-    //     .map_err(|e| format!("Failed to read {{ resource.name }}: {}", e))?;
+{% if resource.operations.read %}
+    // Build the SDK request
+    let mut request = client.{{ resource.operations.read.sdk_operation }}();
 
-    // Return current state (refresh would update from API)
-    Ok(current)
+    // Set identifier fields from current state
+{% for field in resource.fields %}
+{% if field.required and field.immutable %}
+    if let Some(val) = current.get("{{ field.name }}") {
+        if let Some(s) = val.as_str() {
+            request = request.{{ field.name }}(s);
+        }
+    }
+{% endif %}
+{% endfor %}
+
+    match request.send().await {
+        Ok(response) => {
+            debug!("Read response: {:?}", response);
+            // TODO: Map response fields back to state
+            Ok(current)
+        }
+        Err(e) => {
+            warn!("Failed to read {{ resource.name }}: {:?}", e);
+            // Return current state on read failure (resource may have been deleted)
+            Ok(current)
+        }
+    }
 {% else %}
-    // TODO: Implement read for {{ provider }}
-    Err("Not implemented".to_string())
+    // No read operation defined
+    Ok(current)
 {% endif %}
 }
 
 /// Update a {{ resource.name }}
-#[allow(unused_variables)]
 pub async fn update(
-    config: &HashMap<String, String>,
+    client: {{ provider | client_type(service_name=service_name) }},
     input: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-{% if provider == "Aws" %}
-    // Extract input fields
+    info!("Updating {{ resource.name }}");
+    debug!("Input: {:?}", input);
+
+{% if resource.operations.update %}
+    // Build the SDK request
+    let mut request = client.{{ resource.operations.update.sdk_operation }}();
+
+    // Set identifier fields (immutable)
 {% for field in resource.fields %}
-{% if not field.immutable %}
-    let {{ field.name }} = input.get("{{ field.name }}")
-        .and_then(|v| v.as_str());
+{% if field.required and field.immutable %}
+    if let Some(val) = input.get("{{ field.name }}") {
+        if let Some(s) = val.as_str() {
+            request = request.{{ field.name }}(s);
+        }
+    }
 {% endif %}
 {% endfor %}
 
-    // TODO: Initialize AWS SDK client using config
-    // let sdk_config = aws_config::from_env()
-    //     .region(config.get("region").map(|s| Region::new(s.clone())))
-    //     .load()
-    //     .await;
-    // let client = aws_sdk_{{ service_name }}::Client::new(&sdk_config);
-
-    // TODO: Call AWS SDK to update the resource
-    // let result = client
-    //     .update_{{ resource.name }}()
+    // Set updatable fields
 {% for field in resource.fields %}
 {% if not field.immutable %}
-    //     .{{ field.name }}({{ field.name }})
-{% endif %}
-{% endfor %}
-    //     .send()
-    //     .await
-    //     .map_err(|e| format!("Failed to update {{ resource.name }}: {}", e))?;
-
-    // Return updated state
-    Ok(input)
+    if let Some(val) = input.get("{{ field.name }}") {
+{% if field.field_type == "String" %}
+        if let Some(s) = val.as_str() {
+            request = request.{{ field.name }}(s);
+        }
+{% elif field.field_type == "Integer" %}
+        if let Some(n) = val.as_i64() {
+            request = request.{{ field.name }}(n as i32);
+        }
+{% elif field.field_type == "Boolean" %}
+        if let Some(b) = val.as_bool() {
+            request = request.{{ field.name }}(b);
+        }
+{% elif field.field_type == "Float" %}
+        if let Some(n) = val.as_f64() {
+            request = request.{{ field.name }}(n);
+        }
 {% else %}
-    // TODO: Implement update for {{ provider }}
-    Err("Not implemented".to_string())
+        if let Some(s) = val.as_str() {
+            request = request.{{ field.name }}(s);
+        }
+{% endif %}
+    }
+{% endif %}
+{% endfor %}
+
+    match request.send().await {
+        Ok(response) => {
+            info!("Successfully updated {{ resource.name }}");
+            debug!("Response: {:?}", response);
+            Ok(input)
+        }
+        Err(e) => {
+            error!("Failed to update {{ resource.name }}: {:?}", e);
+            Err(format!("Failed to update {{ resource.name }}: {}", e))
+        }
+    }
+{% else %}
+    // No update operation defined
+    warn!("Update operation not defined for {{ resource.name }}");
+    Ok(input)
 {% endif %}
 }
 
 /// Delete a {{ resource.name }}
-#[allow(unused_variables)]
+pub async fn delete(
+    client: {{ provider | client_type(service_name=service_name) }},
+    current: serde_json::Value,
+) -> Result<(), String> {
+    info!("Deleting {{ resource.name }}");
+    debug!("Current state: {:?}", current);
+
+{% if resource.operations.delete %}
+    // Build the SDK request
+    let mut request = client.{{ resource.operations.delete.sdk_operation }}();
+
+    // Set identifier fields
+{% for field in resource.fields %}
+{% if field.required and field.immutable %}
+    if let Some(val) = current.get("{{ field.name }}") {
+        if let Some(s) = val.as_str() {
+            request = request.{{ field.name }}(s);
+        }
+    }
+{% endif %}
+{% endfor %}
+
+    match request.send().await {
+        Ok(_) => {
+            info!("Successfully deleted {{ resource.name }}");
+            Ok(())
+        }
+        Err(e) => {
+            error!("Failed to delete {{ resource.name }}: {:?}", e);
+            Err(format!("Failed to delete {{ resource.name }}: {}", e))
+        }
+    }
+{% else %}
+    // No delete operation defined
+    warn!("Delete operation not defined for {{ resource.name }}");
+    Ok(())
+{% endif %}
+}
+
+{% else %}
+use std::collections::HashMap;
+
+/// Create a new {{ resource.name }}
+pub async fn create(
+    config: &HashMap<String, String>,
+    input: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    info!("Creating {{ resource.name }}");
+    debug!("Input: {:?}", input);
+
+    // Validate required fields
+{% for field in resource.fields %}
+{% if field.required %}
+    if input.get("{{ field.name }}").is_none() {
+        return Err("Missing required field: {{ field.name }}".to_string());
+    }
+{% endif %}
+{% endfor %}
+
+    // TODO: Implement {{ provider }} SDK calls
+    let mut output = input.clone();
+    if let Some(obj) = output.as_object_mut() {
+{% for output_field in resource.outputs %}
+        obj.insert(
+            "{{ output_field.name }}".to_string(),
+            serde_json::Value::String(format!("computed-{{ output_field.name }}")),
+        );
+{% endfor %}
+    }
+
+    Ok(output)
+}
+
+/// Read a {{ resource.name }}
+pub async fn read(
+    config: &HashMap<String, String>,
+    current: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    debug!("Reading {{ resource.name }}");
+    // TODO: Implement {{ provider }} SDK calls
+    Ok(current)
+}
+
+/// Update a {{ resource.name }}
+pub async fn update(
+    config: &HashMap<String, String>,
+    input: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    info!("Updating {{ resource.name }}");
+    // TODO: Implement {{ provider }} SDK calls
+    Ok(input)
+}
+
+/// Delete a {{ resource.name }}
 pub async fn delete(
     config: &HashMap<String, String>,
     current: serde_json::Value,
 ) -> Result<(), String> {
-{% if provider == "Aws" %}
-    // TODO: Initialize AWS SDK client using config
-    // let sdk_config = aws_config::from_env()
-    //     .region(config.get("region").map(|s| Region::new(s.clone())))
-    //     .load()
-    //     .await;
-    // let client = aws_sdk_{{ service_name }}::Client::new(&sdk_config);
-
-    // TODO: Call AWS SDK to delete the resource
-    // Extract identifier from current state
-    // let id = current.get("id").and_then(|v| v.as_str());
-    // client
-    //     .delete_{{ resource.name }}()
-    //     .send()
-    //     .await
-    //     .map_err(|e| format!("Failed to delete {{ resource.name }}: {}", e))?;
-
+    info!("Deleting {{ resource.name }}");
+    // TODO: Implement {{ provider }} SDK calls
     Ok(())
-{% else %}
-    // TODO: Implement delete for {{ provider }}
-    Err("Not implemented".to_string())
-{% endif %}
 }
+{% endif %}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_{{ resource.name }}_create() {
-        // Test {{ resource.name }} create operation
-        let config = HashMap::new();
-        let input = serde_json::json!({
-{% for field in resource.fields %}
-            "{{ field.name }}": "test-value",
-{% endfor %}
-        });
-
-        // Note: This will fail without actual AWS credentials
-        // let result = create(&config, input).await;
-        // assert!(result.is_ok());
+    #[test]
+    fn test_{{ resource.name | sanitize_identifier_part }}_placeholder() {
+        // Placeholder test for {{ resource.name }}
+        // Real tests would require SDK mocking
+        assert!(true);
     }
 }

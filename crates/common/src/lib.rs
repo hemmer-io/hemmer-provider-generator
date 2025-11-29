@@ -42,6 +42,141 @@ pub enum Provider {
     Kubernetes,
 }
 
+/// Provider-specific SDK configuration for code generation
+///
+/// This struct contains all the provider-specific patterns needed to generate
+/// SDK client code without hardcoding provider checks in templates.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderSdkConfig {
+    /// SDK crate naming pattern (e.g., "aws-sdk-{service}" where {service} is replaced)
+    pub sdk_crate_pattern: String,
+    /// Client type pattern (e.g., "aws_sdk_{service}::Client")
+    pub client_type_pattern: String,
+    /// Config crate name (e.g., "aws-config")
+    pub config_crate: Option<String>,
+    /// Whether the SDK uses async clients
+    pub async_client: bool,
+    /// Region attribute name (e.g., "region" for AWS, "location" for GCP)
+    pub region_attr: Option<String>,
+    /// Additional config attributes specific to this provider
+    pub config_attrs: Vec<ProviderConfigAttr>,
+}
+
+/// A provider-specific configuration attribute
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderConfigAttr {
+    /// Attribute name (e.g., "profile", "project_id")
+    pub name: String,
+    /// Human-readable description
+    pub description: String,
+    /// Whether this attribute is required
+    pub required: bool,
+}
+
+impl Provider {
+    /// Get the SDK configuration for this provider
+    pub fn sdk_config(&self) -> ProviderSdkConfig {
+        match self {
+            Provider::Aws => ProviderSdkConfig {
+                sdk_crate_pattern: "aws-sdk-{service}".to_string(),
+                client_type_pattern: "aws_sdk_{service}::Client".to_string(),
+                config_crate: Some("aws-config".to_string()),
+                async_client: true,
+                region_attr: Some("region".to_string()),
+                config_attrs: vec![
+                    ProviderConfigAttr {
+                        name: "region".to_string(),
+                        description: "AWS region to use".to_string(),
+                        required: false,
+                    },
+                    ProviderConfigAttr {
+                        name: "profile".to_string(),
+                        description: "AWS profile to use".to_string(),
+                        required: false,
+                    },
+                ],
+            },
+            Provider::Gcp => ProviderSdkConfig {
+                sdk_crate_pattern: "google-cloud-{service}".to_string(),
+                client_type_pattern: "google_cloud_{service}::Client".to_string(),
+                config_crate: None,
+                async_client: true,
+                region_attr: Some("location".to_string()),
+                config_attrs: vec![
+                    ProviderConfigAttr {
+                        name: "project".to_string(),
+                        description: "GCP project ID".to_string(),
+                        required: false,
+                    },
+                    ProviderConfigAttr {
+                        name: "location".to_string(),
+                        description: "GCP location/region".to_string(),
+                        required: false,
+                    },
+                ],
+            },
+            Provider::Azure => ProviderSdkConfig {
+                sdk_crate_pattern: "azure_sdk_{service}".to_string(),
+                client_type_pattern: "azure_sdk_{service}::Client".to_string(),
+                config_crate: Some("azure_identity".to_string()),
+                async_client: true,
+                region_attr: Some("location".to_string()),
+                config_attrs: vec![
+                    ProviderConfigAttr {
+                        name: "subscription_id".to_string(),
+                        description: "Azure subscription ID".to_string(),
+                        required: false,
+                    },
+                    ProviderConfigAttr {
+                        name: "tenant_id".to_string(),
+                        description: "Azure tenant ID".to_string(),
+                        required: false,
+                    },
+                ],
+            },
+            Provider::Kubernetes => ProviderSdkConfig {
+                sdk_crate_pattern: "kube".to_string(),
+                client_type_pattern: "kube::Client".to_string(),
+                config_crate: None,
+                async_client: true,
+                region_attr: None,
+                config_attrs: vec![
+                    ProviderConfigAttr {
+                        name: "kubeconfig".to_string(),
+                        description: "Path to kubeconfig file".to_string(),
+                        required: false,
+                    },
+                    ProviderConfigAttr {
+                        name: "context".to_string(),
+                        description: "Kubernetes context to use".to_string(),
+                        required: false,
+                    },
+                ],
+            },
+        }
+    }
+
+    /// Get the SDK crate name for a specific service
+    pub fn sdk_crate_for_service(&self, service: &str) -> String {
+        self.sdk_config()
+            .sdk_crate_pattern
+            .replace("{service}", service)
+    }
+
+    /// Get the client type for a specific service
+    pub fn client_type_for_service(&self, service: &str) -> String {
+        self.sdk_config()
+            .client_type_pattern
+            .replace("{service}", service)
+    }
+
+    /// Check if this provider uses a shared client (like Kubernetes)
+    /// vs per-service clients (like AWS)
+    pub fn uses_shared_client(&self) -> bool {
+        matches!(self, Provider::Kubernetes)
+    }
+}
+
 /// Intermediate representation of a unified cloud provider with multiple services
 ///
 /// This represents a complete provider (e.g., AWS) with all its services.

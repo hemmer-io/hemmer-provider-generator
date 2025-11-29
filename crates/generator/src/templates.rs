@@ -14,6 +14,17 @@ pub fn load_templates() -> Result<Tera> {
     tera.register_filter("sdk_attr_type", sdk_attr_type_filter);
     tera.register_filter("rust_type", rust_type_filter);
     tera.register_filter("capitalize", capitalize_filter);
+    tera.register_filter("lower", lower_filter);
+    tera.register_filter("sdk_dependency", sdk_dependency_filter);
+    tera.register_filter("client_type", client_type_filter);
+    tera.register_filter("sdk_crate_module", sdk_crate_module_filter);
+    tera.register_filter("has_config_crate", has_config_crate_filter);
+    tera.register_filter("config_crate", config_crate_filter);
+    tera.register_filter("uses_shared_client", uses_shared_client_filter);
+    tera.register_filter("sanitize_identifier", sanitize_identifier_filter);
+    tera.register_filter("sanitize_identifier_part", sanitize_identifier_part_filter);
+    tera.register_filter("to_camel_case", to_camel_case_filter);
+    tera.register_filter("json_extractor", json_extractor_filter);
 
     // Add templates inline for now (Phase 3 MVP)
     // In production, these could be loaded from files
@@ -78,8 +89,15 @@ pub fn load_unified_templates() -> Result<Tera> {
     tera.register_filter("capitalize", capitalize_filter);
     tera.register_filter("lower", lower_filter);
     tera.register_filter("sdk_dependency", sdk_dependency_filter);
+    tera.register_filter("client_type", client_type_filter);
+    tera.register_filter("sdk_crate_module", sdk_crate_module_filter);
+    tera.register_filter("has_config_crate", has_config_crate_filter);
+    tera.register_filter("config_crate", config_crate_filter);
+    tera.register_filter("uses_shared_client", uses_shared_client_filter);
     tera.register_filter("sanitize_identifier", sanitize_identifier_filter);
     tera.register_filter("sanitize_identifier_part", sanitize_identifier_part_filter);
+    tera.register_filter("to_camel_case", to_camel_case_filter);
+    tera.register_filter("json_extractor", json_extractor_filter);
 
     // Add unified templates
     tera.add_raw_template(
@@ -455,4 +473,199 @@ fn field_type_to_sdk_attr(field_type: &hemmer_provider_generator_common::FieldTy
         FieldType::Enum(_) => "AttributeType::String".to_string(), // Enums as strings
         FieldType::Object(_) => "AttributeType::Dynamic".to_string(), // Complex objects as dynamic
     }
+}
+
+/// Filter to generate SDK client type for a provider and service
+/// Usage: {{ provider | client_type(service_name=service.name) }}
+/// Examples:
+///   - Aws + "s3" -> "aws_sdk_s3::Client"
+///   - Gcp + "storage" -> "google_cloud_storage::Client"
+///   - Kubernetes -> "kube::Client"
+fn client_type_filter(value: &Value, args: &HashMap<String, Value>) -> tera::Result<Value> {
+    use hemmer_provider_generator_common::Provider;
+
+    let provider_str = value
+        .as_str()
+        .ok_or_else(|| tera::Error::msg("client_type filter expects provider as a string"))?;
+
+    let provider = match provider_str {
+        "Aws" => Provider::Aws,
+        "Gcp" => Provider::Gcp,
+        "Azure" => Provider::Azure,
+        "Kubernetes" => Provider::Kubernetes,
+        _ => {
+            return Err(tera::Error::msg(format!(
+                "Unknown provider: {}",
+                provider_str
+            )))
+        }
+    };
+
+    let service_name = args
+        .get("service_name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    let client_type = provider.client_type_for_service(service_name);
+    Ok(Value::String(client_type))
+}
+
+/// Filter to generate SDK crate name (Rust module style) for a provider and service
+/// Usage: {{ provider | sdk_crate_module(service_name=service.name) }}
+/// Examples:
+///   - Aws + "s3" -> "aws_sdk_s3"
+///   - Gcp + "storage" -> "google_cloud_storage"
+fn sdk_crate_module_filter(value: &Value, args: &HashMap<String, Value>) -> tera::Result<Value> {
+    use hemmer_provider_generator_common::Provider;
+
+    let provider_str = value
+        .as_str()
+        .ok_or_else(|| tera::Error::msg("sdk_crate_module filter expects provider as a string"))?;
+
+    let provider = match provider_str {
+        "Aws" => Provider::Aws,
+        "Gcp" => Provider::Gcp,
+        "Azure" => Provider::Azure,
+        "Kubernetes" => Provider::Kubernetes,
+        _ => {
+            return Err(tera::Error::msg(format!(
+                "Unknown provider: {}",
+                provider_str
+            )))
+        }
+    };
+
+    let service_name = args
+        .get("service_name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    // Get the crate name and convert to module style (- to _)
+    let crate_name = provider.sdk_crate_for_service(service_name);
+    let module_name = crate_name.replace("-", "_");
+    Ok(Value::String(module_name))
+}
+
+/// Filter to check if a provider has a config crate
+/// Usage: {% if provider | has_config_crate %}
+fn has_config_crate_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
+    use hemmer_provider_generator_common::Provider;
+
+    let provider_str = value
+        .as_str()
+        .ok_or_else(|| tera::Error::msg("has_config_crate filter expects provider as a string"))?;
+
+    let provider = match provider_str {
+        "Aws" => Provider::Aws,
+        "Gcp" => Provider::Gcp,
+        "Azure" => Provider::Azure,
+        "Kubernetes" => Provider::Kubernetes,
+        _ => {
+            return Err(tera::Error::msg(format!(
+                "Unknown provider: {}",
+                provider_str
+            )))
+        }
+    };
+
+    let has_config = provider.sdk_config().config_crate.is_some();
+    Ok(Value::Bool(has_config))
+}
+
+/// Filter to get the config crate name for a provider
+/// Usage: {{ provider | config_crate }}
+fn config_crate_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
+    use hemmer_provider_generator_common::Provider;
+
+    let provider_str = value
+        .as_str()
+        .ok_or_else(|| tera::Error::msg("config_crate filter expects provider as a string"))?;
+
+    let provider = match provider_str {
+        "Aws" => Provider::Aws,
+        "Gcp" => Provider::Gcp,
+        "Azure" => Provider::Azure,
+        "Kubernetes" => Provider::Kubernetes,
+        _ => {
+            return Err(tera::Error::msg(format!(
+                "Unknown provider: {}",
+                provider_str
+            )))
+        }
+    };
+
+    let config_crate = provider.sdk_config().config_crate.unwrap_or_default();
+    Ok(Value::String(config_crate))
+}
+
+/// Filter to check if a provider uses a shared client vs per-service clients
+/// Usage: {% if provider | uses_shared_client %}
+fn uses_shared_client_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
+    use hemmer_provider_generator_common::Provider;
+
+    let provider_str = value.as_str().ok_or_else(|| {
+        tera::Error::msg("uses_shared_client filter expects provider as a string")
+    })?;
+
+    let provider = match provider_str {
+        "Aws" => Provider::Aws,
+        "Gcp" => Provider::Gcp,
+        "Azure" => Provider::Azure,
+        "Kubernetes" => Provider::Kubernetes,
+        _ => {
+            return Err(tera::Error::msg(format!(
+                "Unknown provider: {}",
+                provider_str
+            )))
+        }
+    };
+
+    Ok(Value::Bool(provider.uses_shared_client()))
+}
+
+/// Filter to convert snake_case to camelCase for SDK accessor methods
+/// Usage: {{ "bucket_name" | to_camel_case }} -> "bucketName"
+fn to_camel_case_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
+    let s = value
+        .as_str()
+        .ok_or_else(|| tera::Error::msg("to_camel_case filter expects a string"))?;
+
+    let mut result = String::new();
+    let mut capitalize_next = false;
+
+    for c in s.chars() {
+        if c == '_' {
+            capitalize_next = true;
+        } else if capitalize_next {
+            result.push(c.to_ascii_uppercase());
+            capitalize_next = false;
+        } else {
+            result.push(c);
+        }
+    }
+
+    Ok(Value::String(result))
+}
+
+/// Filter to convert FieldType to JSON extraction method
+/// Usage: {{ field.field_type | json_extractor }} -> "as_str()"
+fn json_extractor_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
+    use hemmer_provider_generator_common::FieldType;
+
+    let field_type: FieldType = serde_json::from_value(value.clone())
+        .map_err(|e| tera::Error::msg(format!("Failed to deserialize FieldType: {}", e)))?;
+
+    let extractor = match field_type {
+        FieldType::String => "as_str().map(|s| s.to_string())",
+        FieldType::Integer => "as_i64()",
+        FieldType::Float => "as_f64()",
+        FieldType::Boolean => "as_bool()",
+        FieldType::DateTime => "as_str().map(|s| s.to_string())",
+        FieldType::List(_) => "as_array().cloned()",
+        FieldType::Map(_, _) => "as_object().cloned()",
+        FieldType::Enum(_) => "as_str().map(|s| s.to_string())",
+        FieldType::Object(_) => "clone()",
+    };
+
+    Ok(Value::String(extractor.to_string()))
 }
