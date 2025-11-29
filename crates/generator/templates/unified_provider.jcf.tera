@@ -1,0 +1,114 @@
+# {{ provider_name | capitalize }} Provider
+# Generated from {{ provider_name }} SDK version {{ sdk_version }}
+#
+# This unified provider implements CRUD operations for multiple services.
+
+provider = (
+    name: "{{ provider_name }}",
+    version: "{{ sdk_version }}",
+    protocol: "grpc",
+
+    # Provider configuration schema
+    config: (
+{% if provider == "Aws" %}
+        region: (
+            type: "string",
+            optional: true,
+            description: "AWS region to use",
+        ),
+        profile: (
+            type: "string",
+            optional: true,
+            description: "AWS profile to use",
+        ),
+{% elif provider == "Gcp" %}
+        project: (
+            type: "string",
+            optional: true,
+            description: "GCP project ID",
+        ),
+        region: (
+            type: "string",
+            optional: true,
+            description: "GCP region to use",
+        ),
+{% elif provider == "Azure" %}
+        subscription_id: (
+            type: "string",
+            optional: true,
+            description: "Azure subscription ID",
+        ),
+        tenant_id: (
+            type: "string",
+            optional: true,
+            description: "Azure tenant ID",
+        ),
+{% elif provider == "Kubernetes" %}
+        kubeconfig: (
+            type: "string",
+            optional: true,
+            description: "Path to kubeconfig file",
+        ),
+        context: (
+            type: "string",
+            optional: true,
+            description: "Kubernetes context to use",
+        ),
+{% endif %}
+    ),
+
+    # Services
+    services: (
+{% for service in services %}
+        {{ service.name }}: (
+            description: "{{ service.name | capitalize }} service resources",
+
+            resources: (
+{% for resource in service.resources %}
+                {{ resource.name }}: (
+                    description: "{{ resource.description | default(value=resource.name ~ " resource") }}",
+
+                    attributes: (
+{% for field in resource.fields %}
+                        {{ field.name }}: (
+                            type: "{{ field.field_type | jcl_type }}",
+{% if field.required %}
+                            required: true,
+{% else %}
+                            optional: true,
+{% endif %}
+{% if field.sensitive %}
+                            sensitive: true,
+{% endif %}
+{% if field.immutable %}
+                            force_new: true,
+{% endif %}
+{% if field.description %}
+                            description: "{{ field.description }}",
+{% endif %}
+                        ),
+{% endfor %}
+{% for output in resource.outputs %}
+                        {{ output.name }}: (
+                            type: "{{ output.field_type | jcl_type }}",
+                            computed: true,
+{% if output.description %}
+                            description: "{{ output.description }}",
+{% endif %}
+                        ),
+{% endfor %}
+                    ),
+
+                    capabilities: (
+                        create: {% if resource.operations.create %}true{% else %}false{% endif %},
+                        read: {% if resource.operations.read %}true{% else %}false{% endif %},
+                        update: {% if resource.operations.update %}true{% else %}false{% endif %},
+                        delete: {% if resource.operations.delete %}true{% else %}false{% endif %},
+                    ),
+                ),
+{% endfor %}
+            ),
+        ),
+{% endfor %}
+    ),
+)

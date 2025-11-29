@@ -1,0 +1,20 @@
+//! {{ service_name | capitalize }} Provider - Entry Point
+//!
+//! Auto-generated from {{ provider }} SDK version {{ sdk_version }}
+
+use hemmer_provider_sdk::serve;
+
+// Import from the library crate
+use hemmer_{{ service_name }}_provider::{{ service_name | capitalize }}Provider;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize logging
+    hemmer_provider_sdk::init_logging_with_default();
+
+    // Create and serve the provider
+    let provider = {{ service_name | capitalize }}Provider::new();
+    serve(provider).await?;
+
+    Ok(())
+}

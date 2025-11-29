@@ -138,9 +138,10 @@ fn test_generate_unified_aws_provider() {
         .expect("Failed to generate provider");
 
     // Verify top-level files exist
-    assert!(output_dir.join("provider.k").exists());
+    assert!(output_dir.join("provider.jcf").exists());
     assert!(output_dir.join("Cargo.toml").exists());
     assert!(output_dir.join("README.md").exists());
+    assert!(output_dir.join("src/main.rs").exists());
     assert!(output_dir.join("src/lib.rs").exists());
 
     // Verify docs directory and files exist
@@ -160,14 +161,15 @@ fn test_generate_unified_aws_provider() {
     assert!(output_dir.join("src/dynamodb/resources/mod.rs").exists());
     assert!(output_dir.join("src/dynamodb/resources/table.rs").exists());
 
-    // Verify content of provider.k
-    let provider_k_content =
-        fs::read_to_string(output_dir.join("provider.k")).expect("Failed to read provider.k");
-    assert!(provider_k_content.contains("AwsProvider"));
-    assert!(provider_k_content.contains("S3Service"));
-    assert!(provider_k_content.contains("DynamodbService"));
-    assert!(provider_k_content.contains("Bucket"));
-    assert!(provider_k_content.contains("Table"));
+    // Verify content of provider.jcf
+    let provider_jcf_content =
+        fs::read_to_string(output_dir.join("provider.jcf")).expect("Failed to read provider.jcf");
+    assert!(provider_jcf_content.contains("name: \"aws\""));
+    assert!(provider_jcf_content.contains("protocol: \"grpc\""));
+    assert!(provider_jcf_content.contains("s3:"));
+    assert!(provider_jcf_content.contains("dynamodb:"));
+    assert!(provider_jcf_content.contains("bucket:"));
+    assert!(provider_jcf_content.contains("table:"));
 
     // Verify content of Cargo.toml
     let cargo_toml_content =
@@ -175,6 +177,14 @@ fn test_generate_unified_aws_provider() {
     assert!(cargo_toml_content.contains("hemmer-aws-provider"));
     assert!(cargo_toml_content.contains("aws-sdk-s3"));
     assert!(cargo_toml_content.contains("aws-sdk-dynamodb"));
+    assert!(cargo_toml_content.contains("hemmer-provider-sdk"));
+    assert!(cargo_toml_content.contains("[[bin]]"));
+
+    // Verify content of main.rs
+    let main_rs_content =
+        fs::read_to_string(output_dir.join("src/main.rs")).expect("Failed to read main.rs");
+    assert!(main_rs_content.contains("hemmer_provider_sdk::serve"));
+    assert!(main_rs_content.contains("AwsProvider"));
 
     // Verify content of lib.rs
     let lib_rs_content =
@@ -182,8 +192,8 @@ fn test_generate_unified_aws_provider() {
     assert!(lib_rs_content.contains("pub mod s3;"));
     assert!(lib_rs_content.contains("pub mod dynamodb;"));
     assert!(lib_rs_content.contains("pub struct AwsProvider"));
-    assert!(lib_rs_content.contains("s3_client: aws_sdk_s3::Client"));
-    assert!(lib_rs_content.contains("dynamodb_client: aws_sdk_dynamodb::Client"));
+    assert!(lib_rs_content.contains("impl ProviderService for AwsProvider"));
+    assert!(lib_rs_content.contains("fn schema(&self)"));
 
     // Clean up
     fs::remove_dir_all(&output_dir).expect("Failed to clean up test directory");
@@ -211,9 +221,10 @@ fn test_generate_unified_provider_with_empty_services() {
         .expect("Failed to generate provider");
 
     // Verify top-level files exist even with no services
-    assert!(output_dir.join("provider.k").exists());
+    assert!(output_dir.join("provider.jcf").exists());
     assert!(output_dir.join("Cargo.toml").exists());
     assert!(output_dir.join("README.md").exists());
+    assert!(output_dir.join("src/main.rs").exists());
     assert!(output_dir.join("src/lib.rs").exists());
 
     // Clean up

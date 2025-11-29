@@ -9,242 +9,269 @@
 {% for service in services %}pub mod {{ service.name }};
 {% endfor %}
 
-use async_trait::async_trait;
-use hemmer_core::Result;
-use hemmer_provider::{ProviderConfig, ProviderExecutor, ResourceInput, ResourceOutput, ResourcePlan};
-use thiserror::Error;
+use hemmer_provider_sdk::{
+    Attribute, AttributeFlags, AttributeType, Block, PlanResult, ProviderSchema, ProviderService,
+    Schema,
+};
+use std::collections::HashMap;
 
-/// Provider error types
-#[derive(Error, Debug)]
-pub enum ProviderError {
-    #[error("Resource not found: {0}")]
-    NotFound(String),
-
-    #[error("SDK error: {0}")]
-    SdkError(String),
-
-    #[error("Validation error: {0}")]
-    ValidationError(String),
-
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-}
-
-/// Result type for provider operations
-pub type Result<T> = std::result::Result<T, ProviderError>;
-
-/// Unified provider client for {{ provider_name | capitalize }}
+/// Unified provider for {{ provider_name | capitalize }}
 pub struct {{ provider_name | capitalize }}Provider {
-{% if provider == "Aws" %}{% for service in services %}    {{ service.name }}_client: aws_sdk_{{ service.name }}::Client,
-{% endfor %}    /// Tokio runtime for async operations
-    /// Each provider instance owns its own runtime to ensure async operations
-    /// work correctly when loaded as a dynamic library (cdylib)
-    runtime: tokio::runtime::Runtime,
-{% elif provider == "Gcp" %}    // GCP clients
-{% for service in services %}    // {{ service.name }}_client: google_{{ service.name }}::Client,
-{% endfor %}    runtime: tokio::runtime::Runtime,
-{% elif provider == "Azure" %}    // Azure clients
-{% for service in services %}    // {{ service.name }}_client: azure_{{ service.name }}::Client,
-{% endfor %}    runtime: tokio::runtime::Runtime,
-{% elif provider == "Kubernetes" %}    kube_client: kube::Client,
-    runtime: tokio::runtime::Runtime,
-{% endif %}
+    config: HashMap<String, String>,
 }
 
 impl {{ provider_name | capitalize }}Provider {
-    /// Create a new unified provider instance
-    pub fn new() -> Result<Self> {
-        // Create Tokio runtime for async operations
-        // This ensures async AWS SDK calls work when the provider is loaded as a dynamic library
-        let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| ProviderError::SdkError(format!("Failed to create Tokio runtime: {}", e)))?;
+    /// Create a new provider instance
+    pub fn new() -> Self {
+        Self {
+            config: HashMap::new(),
+        }
+    }
 
-{% if provider == "Aws" %}        // Load AWS config and initialize clients using the runtime
-        let (config{% for service in services %}, {{ service.name }}_client{% endfor %}) = runtime.block_on(async {
-            let config = aws_config::load_from_env().await;
-{% for service in services %}            let {{ service.name }}_client = aws_sdk_{{ service.name }}::Client::new(&config);
-{% endfor %}            (config{% for service in services %}, {{ service.name }}_client{% endfor %})
-        });
-
-{% elif provider == "Kubernetes" %}        // Initialize Kubernetes client using the runtime
-        let kube_client = runtime.block_on(async {
-            kube::Client::try_default()
-                .await
-                .map_err(|e| ProviderError::SdkError(format!("Failed to create kube client: {}", e)))
-        })?;
-
-{% endif %}        Ok(Self {
-{% if provider == "Aws" %}{% for service in services %}            {{ service.name }}_client,
-{% endfor %}            runtime,
-{% elif provider == "Kubernetes" %}            kube_client,
-            runtime,
+    /// Build the provider schema
+    fn build_schema() -> ProviderSchema {
+        ProviderSchema {
+            provider: Schema {
+                version: 1,
+                block: Block {
+                    attributes: vec![
+{% if provider == "Aws" %}
+                        Attribute {
+                            name: "region".to_string(),
+                            attr_type: AttributeType::String,
+                            flags: AttributeFlags::OPTIONAL,
+                            description: Some("AWS region to use".to_string()),
+                        },
+                        Attribute {
+                            name: "profile".to_string(),
+                            attr_type: AttributeType::String,
+                            flags: AttributeFlags::OPTIONAL,
+                            description: Some("AWS profile to use".to_string()),
+                        },
+{% elif provider == "Gcp" %}
+                        Attribute {
+                            name: "project".to_string(),
+                            attr_type: AttributeType::String,
+                            flags: AttributeFlags::OPTIONAL,
+                            description: Some("GCP project ID".to_string()),
+                        },
+                        Attribute {
+                            name: "region".to_string(),
+                            attr_type: AttributeType::String,
+                            flags: AttributeFlags::OPTIONAL,
+                            description: Some("GCP region to use".to_string()),
+                        },
+{% elif provider == "Azure" %}
+                        Attribute {
+                            name: "subscription_id".to_string(),
+                            attr_type: AttributeType::String,
+                            flags: AttributeFlags::OPTIONAL,
+                            description: Some("Azure subscription ID".to_string()),
+                        },
+                        Attribute {
+                            name: "tenant_id".to_string(),
+                            attr_type: AttributeType::String,
+                            flags: AttributeFlags::OPTIONAL,
+                            description: Some("Azure tenant ID".to_string()),
+                        },
+{% elif provider == "Kubernetes" %}
+                        Attribute {
+                            name: "kubeconfig".to_string(),
+                            attr_type: AttributeType::String,
+                            flags: AttributeFlags::OPTIONAL,
+                            description: Some("Path to kubeconfig file".to_string()),
+                        },
+                        Attribute {
+                            name: "context".to_string(),
+                            attr_type: AttributeType::String,
+                            flags: AttributeFlags::OPTIONAL,
+                            description: Some("Kubernetes context to use".to_string()),
+                        },
 {% endif %}
-        })
+                    ],
+                    block_types: vec![],
+                },
+            },
+            resources: Self::build_resource_schemas(),
+            data_sources: HashMap::new(),
+        }
     }
 
-{% for service in services %}    /// Get {{ service.name }} service handler
-    pub fn {{ service.name }}(&self) -> {{ service.name }}::{{ service.name | capitalize }}Service<'_> {
-        {{ service.name }}::{{ service.name | capitalize }}Service::new(self)
-    }
+    /// Build resource schemas for all services
+    fn build_resource_schemas() -> HashMap<String, Schema> {
+        let mut resources = HashMap::new();
+{% for service in services %}
+{% for resource in service.resources %}
+
+        // {{ service.name }}.{{ resource.name }}
+        resources.insert(
+            "{{ service.name }}_{{ resource.name }}".to_string(),
+            Schema {
+                version: 1,
+                block: Block {
+                    attributes: vec![
+{% for field in resource.fields %}
+                        Attribute {
+                            name: "{{ field.name }}".to_string(),
+                            attr_type: AttributeType::{{ field.field_type | sdk_attr_type }},
+                            flags: {% if field.required %}AttributeFlags::REQUIRED{% else %}AttributeFlags::OPTIONAL{% endif %}{% if field.sensitive %} | AttributeFlags::SENSITIVE{% endif %}{% if field.immutable %} | AttributeFlags::FORCE_NEW{% endif %},
+                            description: {% if field.description %}Some("{{ field.description }}".to_string()){% else %}None{% endif %},
+                        },
+{% endfor %}
+{% for output in resource.outputs %}
+                        Attribute {
+                            name: "{{ output.name }}".to_string(),
+                            attr_type: AttributeType::{{ output.field_type | sdk_attr_type }},
+                            flags: AttributeFlags::COMPUTED,
+                            description: {% if output.description %}Some("{{ output.description }}".to_string()){% else %}None{% endif %},
+                        },
+{% endfor %}
+                    ],
+                    block_types: vec![],
+                },
+            },
+        );
+{% endfor %}
 {% endfor %}
 
-    /// Get reference to the Tokio runtime for executing async operations
-    pub(crate) fn runtime(&self) -> &tokio::runtime::Runtime {
-        &self.runtime
+        resources
     }
 }
 
-/// Implement ProviderExecutor trait for Hemmer integration
-#[async_trait]
-impl ProviderExecutor for {{ provider_name | capitalize }}Provider {
-    /// Configure the provider with authentication and settings
-    async fn configure(&mut self, config: ProviderConfig) -> Result<()> {
-        // Configuration is already handled in new()
-        // Additional runtime configuration can be added here
+impl Default for {{ provider_name | capitalize }}Provider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ProviderService for {{ provider_name | capitalize }}Provider {
+    fn schema(&self) -> ProviderSchema {
+        Self::build_schema()
+    }
+
+    fn configure(&mut self, config: HashMap<String, serde_json::Value>) -> Result<(), String> {
+        for (key, value) in config {
+            if let serde_json::Value::String(s) = value {
+                self.config.insert(key, s);
+            }
+        }
         Ok(())
     }
 
-    /// Plan changes to a resource (diff current vs desired state)
-    async fn plan(
+    fn plan(
         &self,
         resource_type: &str,
-        current_state: Option<&ResourceOutput>,
-        desired_input: &ResourceInput,
-    ) -> Result<ResourcePlan> {
-        // Dispatch to appropriate service based on resource_type
-        // Format: "service_name.resource_name" (e.g., "s3.bucket")
-        let parts: Vec<&str> = resource_type.split('.').collect();
-        if parts.len() != 2 {
-            return Err(hemmer_core::HemmerError::Provider(format!(
-                "Invalid resource type format: {}. Expected 'service.resource'",
-                resource_type
-            )));
+        _prior_state: Option<serde_json::Value>,
+        proposed: serde_json::Value,
+    ) -> Result<PlanResult, String> {
+        // Parse resource type: service_resource format
+        let parts: Vec<&str> = resource_type.split('_').collect();
+        if parts.len() < 2 {
+            return Err(format!("Invalid resource type: {}", resource_type));
+        }
+
+        // Return the proposed state as the planned state
+        Ok(PlanResult {
+            planned_state: proposed,
+            requires_replace: vec![],
+        })
+    }
+
+    async fn create(
+        &self,
+        resource_type: &str,
+        planned: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        // Parse resource type: service_resource format
+        let parts: Vec<&str> = resource_type.split('_').collect();
+        if parts.len() < 2 {
+            return Err(format!("Invalid resource type: {}", resource_type));
         }
 
         let service_name = parts[0];
-        let resource_name = parts[1];
+        let resource_name = parts[1..].join("_");
 
         match service_name {
-{% for service in services %}            "{{ service.name }}" => {
-                self.{{ service.name }}().plan_resource(resource_name, current_state, desired_input).await
+{% for service in services %}
+            "{{ service.name }}" => {
+                {{ service.name }}::create_resource(&resource_name, &self.config, planned).await
             }
-{% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
-                "Unknown service: {}",
-                service_name
-            ))),
+{% endfor %}
+            _ => Err(format!("Unknown service: {}", service_name)),
         }
     }
 
-    /// Create a new resource
-    async fn create(&self, resource_type: &str, input: ResourceInput) -> Result<ResourceOutput> {
-        let parts: Vec<&str> = resource_type.split('.').collect();
-        if parts.len() != 2 {
-            return Err(hemmer_core::HemmerError::Provider(format!(
-                "Invalid resource type format: {}. Expected 'service.resource'",
-                resource_type
-            )));
+    async fn read(
+        &self,
+        resource_type: &str,
+        current: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        // Parse resource type: service_resource format
+        let parts: Vec<&str> = resource_type.split('_').collect();
+        if parts.len() < 2 {
+            return Err(format!("Invalid resource type: {}", resource_type));
         }
 
         let service_name = parts[0];
-        let resource_name = parts[1];
+        let resource_name = parts[1..].join("_");
 
         match service_name {
-{% for service in services %}            "{{ service.name }}" => {
-                self.{{ service.name }}().create_resource(resource_name, input).await
+{% for service in services %}
+            "{{ service.name }}" => {
+                {{ service.name }}::read_resource(&resource_name, &self.config, current).await
             }
-{% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
-                "Unknown service: {}",
-                service_name
-            ))),
+{% endfor %}
+            _ => Err(format!("Unknown service: {}", service_name)),
         }
     }
 
-    /// Read/refresh resource state
-    async fn read(&self, resource_type: &str, id: &str) -> Result<ResourceOutput> {
-        let parts: Vec<&str> = resource_type.split('.').collect();
-        if parts.len() != 2 {
-            return Err(hemmer_core::HemmerError::Provider(format!(
-                "Invalid resource type format: {}. Expected 'service.resource'",
-                resource_type
-            )));
-        }
-
-        let service_name = parts[0];
-        let resource_name = parts[1];
-
-        match service_name {
-{% for service in services %}            "{{ service.name }}" => {
-                self.{{ service.name }}().read_resource(resource_name, id).await
-            }
-{% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
-                "Unknown service: {}",
-                service_name
-            ))),
-        }
-    }
-
-    /// Update an existing resource
     async fn update(
         &self,
         resource_type: &str,
-        id: &str,
-        input: ResourceInput,
-    ) -> Result<ResourceOutput> {
-        let parts: Vec<&str> = resource_type.split('.').collect();
-        if parts.len() != 2 {
-            return Err(hemmer_core::HemmerError::Provider(format!(
-                "Invalid resource type format: {}. Expected 'service.resource'",
-                resource_type
-            )));
+        _prior: serde_json::Value,
+        planned: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        // Parse resource type: service_resource format
+        let parts: Vec<&str> = resource_type.split('_').collect();
+        if parts.len() < 2 {
+            return Err(format!("Invalid resource type: {}", resource_type));
         }
 
         let service_name = parts[0];
-        let resource_name = parts[1];
+        let resource_name = parts[1..].join("_");
 
         match service_name {
-{% for service in services %}            "{{ service.name }}" => {
-                self.{{ service.name }}().update_resource(resource_name, id, input).await
+{% for service in services %}
+            "{{ service.name }}" => {
+                {{ service.name }}::update_resource(&resource_name, &self.config, planned).await
             }
-{% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
-                "Unknown service: {}",
-                service_name
-            ))),
+{% endfor %}
+            _ => Err(format!("Unknown service: {}", service_name)),
         }
     }
 
-    /// Delete a resource
-    async fn delete(&self, resource_type: &str, id: &str) -> Result<()> {
-        let parts: Vec<&str> = resource_type.split('.').collect();
-        if parts.len() != 2 {
-            return Err(hemmer_core::HemmerError::Provider(format!(
-                "Invalid resource type format: {}. Expected 'service.resource'",
-                resource_type
-            )));
+    async fn delete(
+        &self,
+        resource_type: &str,
+        current: serde_json::Value,
+    ) -> Result<(), String> {
+        // Parse resource type: service_resource format
+        let parts: Vec<&str> = resource_type.split('_').collect();
+        if parts.len() < 2 {
+            return Err(format!("Invalid resource type: {}", resource_type));
         }
 
         let service_name = parts[0];
-        let resource_name = parts[1];
+        let resource_name = parts[1..].join("_");
 
         match service_name {
-{% for service in services %}            "{{ service.name }}" => {
-                self.{{ service.name }}().delete_resource(resource_name, id).await
+{% for service in services %}
+            "{{ service.name }}" => {
+                {{ service.name }}::delete_resource(&resource_name, &self.config, current).await
             }
-{% endfor %}            _ => Err(hemmer_core::HemmerError::Provider(format!(
-                "Unknown service: {}",
-                service_name
-            ))),
+{% endfor %}
+            _ => Err(format!("Unknown service: {}", service_name)),
         }
-    }
-}
-
-/// Factory function to create a provider instance
-///
-/// This is the entry point called by Hemmer when loading the provider as a dynamic library.
-#[no_mangle]
-pub extern "C" fn create_provider() -> *mut dyn ProviderExecutor {
-    match {{ provider_name | capitalize }}Provider::new() {
-        Ok(provider) => Box::into_raw(Box::new(provider)) as *mut dyn ProviderExecutor,
-        Err(_) => std::ptr::null_mut(),
     }
 }
 
@@ -254,9 +281,22 @@ mod tests {
 
     #[test]
     fn test_provider_creation() {
-        // Provider creation test
-        // Note: This will fail without proper credentials
-        // let provider = {{ provider_name | capitalize }}Provider::new();
-        // assert!(provider.is_ok());
+        let provider = {{ provider_name | capitalize }}Provider::new();
+        let schema = provider.schema();
+        assert!(!schema.resources.is_empty());
+    }
+
+    #[test]
+    fn test_schema_has_resources() {
+        let provider = {{ provider_name | capitalize }}Provider::new();
+        let schema = provider.schema();
+{% for service in services %}
+{% for resource in service.resources %}
+        assert!(
+            schema.resources.contains_key("{{ service.name }}_{{ resource.name }}"),
+            "Schema should contain {{ service.name }}_{{ resource.name }}"
+        );
+{% endfor %}
+{% endfor %}
     }
 }
