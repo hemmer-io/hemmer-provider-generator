@@ -77,3 +77,42 @@ jobs:
         run: cargo doc --workspace --all-features --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
+
+  # Summary job that fails if any required job fails
+  # This provides a single check for branch protection
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [format, clippy, test, docs, audit]
+    if: always()
+    steps:
+      - name: Check all jobs passed
+        run: |
+          echo "Format: ${{ needs.format.result }}"
+          echo "Clippy: ${{ needs.clippy.result }}"
+          echo "Test: ${{ needs.test.result }}"
+          echo "Docs: ${{ needs.docs.result }}"
+          echo "Audit: ${{ needs.audit.result }}"
+
+          if [[ "${{ needs.format.result }}" != "success" ]]; then
+            echo "::error::Format check failed"
+            exit 1
+          fi
+          if [[ "${{ needs.clippy.result }}" != "success" ]]; then
+            echo "::error::Clippy check failed"
+            exit 1
+          fi
+          if [[ "${{ needs.test.result }}" != "success" ]]; then
+            echo "::error::Tests failed"
+            exit 1
+          fi
+          if [[ "${{ needs.docs.result }}" != "success" ]]; then
+            echo "::error::Documentation check failed"
+            exit 1
+          fi
+          if [[ "${{ needs.audit.result }}" != "success" ]]; then
+            echo "::error::Security audit failed"
+            exit 1
+          fi
+
+          echo "::notice::All CI checks passed successfully!"
