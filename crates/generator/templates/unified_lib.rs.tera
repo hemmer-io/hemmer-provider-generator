@@ -177,7 +177,7 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
     fn plan(
         &self,
         resource_type: &str,
-        _prior_state: Option<serde_json::Value>,
+        prior_state: Option<serde_json::Value>,
         proposed: serde_json::Value,
     ) -> Result<PlanResult, String> {
         // Parse resource type: service_resource format
@@ -186,11 +186,53 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
             return Err(format!("Invalid resource type: {}", resource_type));
         }
 
-        // Return the proposed state as the planned state
-        Ok(PlanResult {
-            planned_state: proposed,
-            requires_replace: vec![],
-        })
+        // Compute diff between prior and proposed states
+        let mut result = PlanResult::from_diff(prior_state.as_ref(), &proposed);
+
+        // Check if any immutable fields changed (requires resource replacement)
+        if let Some(ref prior) = prior_state {
+            if self.has_immutable_field_changes(resource_type, prior, &proposed) {
+                result.requires_replace = true;
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Check if any immutable fields have changed between prior and proposed states
+    fn has_immutable_field_changes(
+        &self,
+        resource_type: &str,
+        prior: &serde_json::Value,
+        proposed: &serde_json::Value,
+    ) -> bool {
+        // Get immutable fields for this resource type
+        let immutable_fields: &[&str] = match resource_type {
+{% for service in services %}
+{% for resource in service.resources %}
+            "{{ service.name }}_{{ resource.name }}" => &[
+{% for field in resource.fields %}
+{% if field.immutable %}
+                "{{ field.name }}",
+{% endif %}
+{% endfor %}
+            ],
+{% endfor %}
+{% endfor %}
+            _ => &[],
+        };
+
+        // Check each immutable field for changes
+        for field in immutable_fields {
+            let prior_val = prior.get(*field);
+            let proposed_val = proposed.get(*field);
+
+            if prior_val != proposed_val {
+                return true;
+            }
+        }
+
+        false
     }
 
     async fn create(
