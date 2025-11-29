@@ -197,19 +197,57 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
     async fn plan(
         &self,
         resource_type: &str,
-        _prior_state: Option<serde_json::Value>,
+        prior_state: Option<serde_json::Value>,
         proposed_state: serde_json::Value,
         _config: serde_json::Value,
     ) -> std::result::Result<PlanResult, tonic::Status> {
         debug!("Planning {} resource", resource_type);
 
-        // For now, return the proposed state as the planned state
-        // Real implementation would diff prior vs proposed
-        Ok(PlanResult {
-            planned_state: proposed_state,
-            changes: vec![],
-            requires_replace: false,
-        })
+        // Compute diff between prior and proposed states
+        let mut result = PlanResult::from_diff(prior_state.as_ref(), &proposed_state);
+
+        // Check if any immutable fields changed (requires resource replacement)
+        if let Some(ref prior) = prior_state {
+            if self.has_immutable_field_changes(resource_type, prior, &proposed_state) {
+                result.requires_replace = true;
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Check if any immutable fields have changed between prior and proposed states
+    fn has_immutable_field_changes(
+        &self,
+        resource_type: &str,
+        prior: &serde_json::Value,
+        proposed: &serde_json::Value,
+    ) -> bool {
+        // Get immutable fields for this resource type
+        let immutable_fields: &[&str] = match resource_type {
+{% for resource in resources %}
+            "{{ resource.name }}" => &[
+{% for field in resource.fields %}
+{% if field.immutable %}
+                "{{ field.name }}",
+{% endif %}
+{% endfor %}
+            ],
+{% endfor %}
+            _ => &[],
+        };
+
+        // Check each immutable field for changes
+        for field in immutable_fields {
+            let prior_val = prior.get(*field);
+            let proposed_val = proposed.get(*field);
+
+            if prior_val != proposed_val {
+                return true;
+            }
+        }
+
+        false
     }
 
     async fn create(
