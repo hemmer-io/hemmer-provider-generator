@@ -7,7 +7,6 @@ Thank you for your interest in contributing to the Hemmer Provider Generator! Th
 ### Prerequisites
 
 - **Rust**: 1.82 or newer ([install via rustup](https://rustup.rs/))
-- **Python**: For pre-commit hooks (optional but recommended)
 - **Git**: For version control
 
 ### Initial Setup
@@ -30,9 +29,7 @@ Thank you for your interest in contributing to the Hemmer Provider Generator! Th
 
 4. **Install pre-commit hooks** (recommended)
    ```bash
-   pip install pre-commit
-   pre-commit install
-   pre-commit install --hook-type commit-msg
+   ./scripts/install-hooks.sh
    ```
 
 ## Development Workflow
@@ -114,12 +111,13 @@ All pull requests automatically run through our CI pipeline:
 
 Pre-commit hooks run locally before each commit:
 
-- **cargo fmt**: Auto-format code
+- **cargo fmt**: Auto-format code (auto-fixes if needed)
 - **cargo clippy**: Lint code
-- **File checks**: Trailing whitespace, YAML/TOML validation, etc.
-- **Commit message**: Validates conventional commits format
+- **cargo test**: Run all tests
 
-Run manually: `pre-commit run --all-files`
+Install with: `./scripts/install-hooks.sh`
+
+Bypass temporarily with: `git commit --no-verify`
 
 ## Pull Request Process
 
