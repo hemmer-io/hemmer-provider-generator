@@ -181,7 +181,7 @@ fn extract_fields_from_operation(
         // Get the schema from the first content type (usually application/json)
         if let Some(media_type) = request_body.content.values().next() {
             if let Some(ref schema_or_ref) = media_type.schema {
-                fields = extract_fields_from_schema(spec, schema_or_ref)?;
+                fields = extract_fields_from_schema(spec, schema_or_ref, false)?;
             }
         }
     }
@@ -197,6 +197,7 @@ fn extract_fields_from_operation(
                 sensitive: false,
                 immutable: param.location == "path", // Path params are usually immutable identifiers
                 description: param.description.clone(),
+                response_accessor: None, // Input fields don't have response accessors
             });
         }
     }
@@ -216,7 +217,7 @@ fn extract_outputs_from_operation(
         if let Some(response) = operation.responses.get(*status) {
             if let Some(media_type) = response.content.values().next() {
                 if let Some(ref schema_or_ref) = media_type.schema {
-                    outputs = extract_fields_from_schema(spec, schema_or_ref)?;
+                    outputs = extract_fields_from_schema(spec, schema_or_ref, true)?;
                     break;
                 }
             }
@@ -227,9 +228,12 @@ fn extract_outputs_from_operation(
 }
 
 /// Extract fields from schema
+///
+/// `is_response` - if true, fields are from a response and should have response accessors
 fn extract_fields_from_schema(
     spec: &OpenApiSpec,
     schema_or_ref: &SchemaOrRef,
+    is_response: bool,
 ) -> Result<Vec<FieldDefinition>> {
     let mut fields = Vec::new();
 
@@ -259,14 +263,21 @@ fn extract_fields_from_schema(
 
         let field_type = convert_schema_to_field_type(spec, field_schema)?;
         let required = schema.required.contains(field_name);
+        let accessor_name = to_snake_case(field_name);
 
         fields.push(FieldDefinition {
-            name: to_snake_case(field_name),
+            name: accessor_name.clone(),
             field_type,
             required,
             sensitive: false,
             immutable: false,
             description: field_schema.description.clone(),
+            // Only response fields have accessors
+            response_accessor: if is_response {
+                Some(accessor_name)
+            } else {
+                None
+            },
         });
     }
 

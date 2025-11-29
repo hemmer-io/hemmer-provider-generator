@@ -26,6 +26,7 @@ fn test_generate_unified_aws_provider() {
                     sensitive: false,
                     immutable: true,
                     description: Some("The name of the bucket".to_string()),
+                    response_accessor: None,
                 },
                 FieldDefinition {
                     name: "region".to_string(),
@@ -34,6 +35,7 @@ fn test_generate_unified_aws_provider() {
                     sensitive: false,
                     immutable: true,
                     description: Some("The AWS region".to_string()),
+                    response_accessor: None,
                 },
             ],
             outputs: vec![FieldDefinition {
@@ -43,6 +45,7 @@ fn test_generate_unified_aws_provider() {
                 sensitive: false,
                 immutable: false,
                 description: Some("The ARN of the bucket".to_string()),
+                response_accessor: Some("arn".to_string()),
             }],
             operations: Operations {
                 create: Some(OperationMapping {
@@ -77,6 +80,7 @@ fn test_generate_unified_aws_provider() {
                     sensitive: false,
                     immutable: true,
                     description: Some("The name of the table".to_string()),
+                    response_accessor: None,
                 },
                 FieldDefinition {
                     name: "read_capacity".to_string(),
@@ -85,6 +89,7 @@ fn test_generate_unified_aws_provider() {
                     sensitive: false,
                     immutable: false,
                     description: Some("Read capacity units".to_string()),
+                    response_accessor: None,
                 },
             ],
             outputs: vec![FieldDefinition {
@@ -94,6 +99,7 @@ fn test_generate_unified_aws_provider() {
                 sensitive: false,
                 immutable: false,
                 description: Some("The ARN of the table".to_string()),
+                response_accessor: Some("table_arn".to_string()),
             }],
             operations: Operations {
                 create: Some(OperationMapping {

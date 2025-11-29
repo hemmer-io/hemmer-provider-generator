@@ -213,6 +213,7 @@ fn extract_fields_from_method(doc: &DiscoveryDoc, method: &Method) -> Result<Vec
                 sensitive: false,
                 immutable: true, // Path params are usually immutable identifiers
                 description: param.description.clone(),
+                response_accessor: None, // Input fields don't have response accessors
             });
         }
     }
@@ -236,21 +237,24 @@ fn extract_outputs_from_method(
     Ok(outputs)
 }
 
-/// Extract fields from schema
+/// Extract fields from schema (used for response/output fields)
 fn extract_fields_from_schema(doc: &DiscoveryDoc, schema: &Schema) -> Result<Vec<FieldDefinition>> {
     let mut fields = Vec::new();
 
     for (field_name, field_schema) in &schema.properties {
         let field_type = convert_schema_to_field_type(doc, field_schema)?;
         let required = schema.required.contains(field_name);
+        let accessor_name = to_snake_case(field_name);
 
         fields.push(FieldDefinition {
-            name: to_snake_case(field_name),
+            name: accessor_name.clone(),
             field_type,
             required,
             sensitive: false,
             immutable: false,
             description: field_schema.description.clone(),
+            // Response fields have accessors for extracting values from SDK responses
+            response_accessor: Some(accessor_name),
         });
     }
 

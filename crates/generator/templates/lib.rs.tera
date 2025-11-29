@@ -289,9 +289,43 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
                         info!("Successfully created {{ resource.name }}");
                         debug!("Response: {:?}", response);
 
-                        // Build the result state with any computed outputs
+                        // Build the result state with computed outputs extracted from response
                         let mut result = planned_state.clone();
-                        // TODO: Extract computed fields from response
+                        if let Some(obj) = result.as_object_mut() {
+{% for output_field in resource.outputs %}
+{% if output_field.response_accessor %}
+{% if output_field.field_type == "String" %}
+                            if let Some(val) = response.{{ output_field.response_accessor }}() {
+                                obj.insert(
+                                    "{{ output_field.name }}".to_string(),
+                                    serde_json::Value::String(val.to_string()),
+                                );
+                            }
+{% elif output_field.field_type == "Integer" %}
+                            if let Some(val) = response.{{ output_field.response_accessor }}() {
+                                obj.insert(
+                                    "{{ output_field.name }}".to_string(),
+                                    serde_json::Value::Number(serde_json::Number::from(*val)),
+                                );
+                            }
+{% elif output_field.field_type == "Boolean" %}
+                            if let Some(val) = response.{{ output_field.response_accessor }}() {
+                                obj.insert(
+                                    "{{ output_field.name }}".to_string(),
+                                    serde_json::Value::Bool(*val),
+                                );
+                            }
+{% else %}
+                            if let Some(val) = response.{{ output_field.response_accessor }}() {
+                                obj.insert(
+                                    "{{ output_field.name }}".to_string(),
+                                    serde_json::Value::String(format!("{:?}", val)),
+                                );
+                            }
+{% endif %}
+{% endif %}
+{% endfor %}
+                        }
                         Ok(result)
                     }
                     Err(e) => {

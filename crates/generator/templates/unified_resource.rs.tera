@@ -104,16 +104,58 @@ pub async fn create(
             info!("Successfully created {{ resource.name }}");
             debug!("Response: {:?}", response);
 
-            // Build output state with computed fields
+            // Build output state with computed fields extracted from response
             let mut output = input.clone();
             if let Some(obj) = output.as_object_mut() {
 {% for output_field in resource.outputs %}
-                // Extract {{ output_field.name }} from response
-                // TODO: Map actual response field - for now use placeholder
+{% if output_field.response_accessor %}
+                // Extract {{ output_field.name }} from response.{{ output_field.response_accessor }}()
+{% if output_field.field_type == "String" %}
+                if let Some(val) = response.{{ output_field.response_accessor }}() {
+                    obj.insert(
+                        "{{ output_field.name }}".to_string(),
+                        serde_json::Value::String(val.to_string()),
+                    );
+                }
+{% elif output_field.field_type == "Integer" %}
+                if let Some(val) = response.{{ output_field.response_accessor }}() {
+                    obj.insert(
+                        "{{ output_field.name }}".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(*val)),
+                    );
+                }
+{% elif output_field.field_type == "Boolean" %}
+                if let Some(val) = response.{{ output_field.response_accessor }}() {
+                    obj.insert(
+                        "{{ output_field.name }}".to_string(),
+                        serde_json::Value::Bool(*val),
+                    );
+                }
+{% elif output_field.field_type == "Float" %}
+                if let Some(val) = response.{{ output_field.response_accessor }}() {
+                    if let Some(num) = serde_json::Number::from_f64(*val) {
+                        obj.insert(
+                            "{{ output_field.name }}".to_string(),
+                            serde_json::Value::Number(num),
+                        );
+                    }
+                }
+{% else %}
+                // Complex type - attempt string conversion
+                if let Some(val) = response.{{ output_field.response_accessor }}() {
+                    obj.insert(
+                        "{{ output_field.name }}".to_string(),
+                        serde_json::Value::String(format!("{:?}", val)),
+                    );
+                }
+{% endif %}
+{% else %}
+                // No accessor defined for {{ output_field.name }} - use placeholder
                 obj.insert(
                     "{{ output_field.name }}".to_string(),
                     serde_json::Value::String(format!("computed-{{ output_field.name }}")),
                 );
+{% endif %}
 {% endfor %}
             }
 
@@ -156,8 +198,55 @@ pub async fn read(
     match request.send().await {
         Ok(response) => {
             debug!("Read response: {:?}", response);
-            // TODO: Map response fields back to state
-            Ok(current)
+
+            // Update state with values from response
+            let mut state = current.clone();
+            if let Some(obj) = state.as_object_mut() {
+{% for output_field in resource.outputs %}
+{% if output_field.response_accessor %}
+{% if output_field.field_type == "String" %}
+                if let Some(val) = response.{{ output_field.response_accessor }}() {
+                    obj.insert(
+                        "{{ output_field.name }}".to_string(),
+                        serde_json::Value::String(val.to_string()),
+                    );
+                }
+{% elif output_field.field_type == "Integer" %}
+                if let Some(val) = response.{{ output_field.response_accessor }}() {
+                    obj.insert(
+                        "{{ output_field.name }}".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(*val)),
+                    );
+                }
+{% elif output_field.field_type == "Boolean" %}
+                if let Some(val) = response.{{ output_field.response_accessor }}() {
+                    obj.insert(
+                        "{{ output_field.name }}".to_string(),
+                        serde_json::Value::Bool(*val),
+                    );
+                }
+{% elif output_field.field_type == "Float" %}
+                if let Some(val) = response.{{ output_field.response_accessor }}() {
+                    if let Some(num) = serde_json::Number::from_f64(*val) {
+                        obj.insert(
+                            "{{ output_field.name }}".to_string(),
+                            serde_json::Value::Number(num),
+                        );
+                    }
+                }
+{% else %}
+                if let Some(val) = response.{{ output_field.response_accessor }}() {
+                    obj.insert(
+                        "{{ output_field.name }}".to_string(),
+                        serde_json::Value::String(format!("{:?}", val)),
+                    );
+                }
+{% endif %}
+{% endif %}
+{% endfor %}
+            }
+
+            Ok(state)
         }
         Err(e) => {
             warn!("Failed to read {{ resource.name }}: {:?}", e);

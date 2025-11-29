@@ -65,7 +65,13 @@ impl<'a> {{ resource.name | capitalize }}<'a> {
             Ok(response) => {
                 info!("Successfully created {{ resource.name }}");
                 debug!("Response: {:?}", response);
-                // TODO: Extract ID from response
+                // Note: This legacy template returns a string ID.
+                // For full field extraction, use unified provider generation.
+{% for output_field in resource.outputs %}
+{% if output_field.response_accessor %}
+                // Could extract: response.{{ output_field.response_accessor }}()
+{% endif %}
+{% endfor %}
                 Ok(format!("{{ resource.name }}_created"))
             }
             Err(e) => {

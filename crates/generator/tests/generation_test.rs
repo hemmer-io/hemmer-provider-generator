@@ -25,6 +25,7 @@ fn test_generate_s3_provider() {
                     sensitive: false,
                     immutable: true,
                     description: Some("Bucket name".to_string()),
+                    response_accessor: None,
                 },
                 FieldDefinition {
                     name: "acl".to_string(),
@@ -33,6 +34,7 @@ fn test_generate_s3_provider() {
                     sensitive: false,
                     immutable: false,
                     description: Some("Access control list".to_string()),
+                    response_accessor: None,
                 },
             ],
             outputs: vec![FieldDefinition {
@@ -42,6 +44,7 @@ fn test_generate_s3_provider() {
                 sensitive: false,
                 immutable: true,
                 description: Some("Amazon Resource Name".to_string()),
+                response_accessor: Some("arn".to_string()),
             }],
             operations: Operations {
                 create: Some(OperationMapping {
