@@ -185,6 +185,46 @@ impl {{ service_name | capitalize }}Provider {
         );
 {% endfor %}
 
+        // Data source schemas
+        let mut data_sources = HashMap::new();
+{% for ds in data_sources %}
+
+        // {{ ds.name | capitalize }} data source schema
+        let mut {{ ds.name }}_attrs = HashMap::new();
+{% for arg in ds.arguments %}
+        {{ ds.name }}_attrs.insert(
+            "{{ arg.name }}".to_string(),
+            Attribute::new(
+                {{ arg.field_type | sdk_attr_type }},
+{% if arg.required %}
+                AttributeFlags::required(),
+{% else %}
+                AttributeFlags::optional(),
+{% endif %}
+            ){% if arg.description %}.with_description("{{ arg.description }}"){% endif %},
+        );
+{% endfor %}
+{% for attr in ds.attributes %}
+        {{ ds.name }}_attrs.insert(
+            "{{ attr.name }}".to_string(),
+            Attribute::new(
+                {{ attr.field_type | sdk_attr_type }},
+                AttributeFlags::computed(),
+            ){% if attr.description %}.with_description("{{ attr.description }}"){% endif %},
+        );
+{% endfor %}
+        data_sources.insert(
+            "{{ ds.name }}".to_string(),
+            Schema {
+                version: 1,
+                block: Block {
+                    attributes: {{ ds.name }}_attrs,
+                    blocks: HashMap::new(),
+                },
+            },
+        );
+{% endfor %}
+
         // Provider config schema
         let mut config_attrs = HashMap::new();
 {% for attr in config_attrs %}
@@ -203,7 +243,7 @@ impl {{ service_name | capitalize }}Provider {
                 },
             },
             resources,
-            data_sources: HashMap::new(),
+            data_sources,
         }
     }
 }
@@ -744,6 +784,107 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
             }
 {% endfor %}
             _ => Err(ProviderError::UnknownResource(resource_type.to_string())),
+        }
+    }
+
+    async fn read_data_source(
+        &self,
+        data_source_type: &str,
+        config: serde_json::Value,
+    ) -> std::result::Result<serde_json::Value, ProviderError> {
+        info!("Reading {} data source", data_source_type);
+
+{% if provider | has_config_crate %}
+        let client = self.get_client().await
+            .map_err(|e| ProviderError::Configuration(e.to_string()))?;
+{% endif %}
+
+        match data_source_type {
+{% for ds in data_sources %}
+            "{{ ds.name }}" => {
+                debug!("Reading {{ ds.name }} data source with config: {:?}", config);
+
+                // Build the SDK request
+                let mut request = client.{{ ds.read_operation.sdk_operation }}();
+
+                // Set arguments from config
+{% for arg in ds.arguments %}
+                if let Some(val) = config.get("{{ arg.name }}") {
+{% if arg.field_type == "String" %}
+                    if let Some(s) = val.as_str() {
+                        request = request.{{ arg.name }}(s);
+                    }
+{% elif arg.field_type == "Integer" %}
+                    if let Some(n) = val.as_i64() {
+                        request = request.{{ arg.name }}(n as i32);
+                    }
+{% elif arg.field_type == "Boolean" %}
+                    if let Some(b) = val.as_bool() {
+                        request = request.{{ arg.name }}(b);
+                    }
+{% else %}
+                    if let Some(s) = val.as_str() {
+                        request = request.{{ arg.name }}(s);
+                    }
+{% endif %}
+                }
+{% endfor %}
+
+                match request.send().await {
+                    Ok(response) => {
+                        debug!("Successfully read {{ ds.name }} data source");
+
+                        // Build result from response
+                        let mut result = serde_json::Map::new();
+
+                        // Extract attributes from response
+{% for attr in ds.attributes %}
+{% if attr.response_accessor %}
+{% if attr.field_type == "String" %}
+                        if let Some(val) = response.{{ attr.response_accessor }}() {
+                            result.insert(
+                                "{{ attr.name }}".to_string(),
+                                serde_json::Value::String(val.to_string()),
+                            );
+                        }
+{% elif attr.field_type == "Integer" %}
+                        if let Some(val) = response.{{ attr.response_accessor }}() {
+                            result.insert(
+                                "{{ attr.name }}".to_string(),
+                                serde_json::Value::Number(serde_json::Number::from(*val)),
+                            );
+                        }
+{% elif attr.field_type == "Boolean" %}
+                        if let Some(val) = response.{{ attr.response_accessor }}() {
+                            result.insert(
+                                "{{ attr.name }}".to_string(),
+                                serde_json::Value::Bool(*val),
+                            );
+                        }
+{% else %}
+                        if let Some(val) = response.{{ attr.response_accessor }}() {
+                            result.insert(
+                                "{{ attr.name }}".to_string(),
+                                serde_json::Value::String(format!("{:?}", val)),
+                            );
+                        }
+{% endif %}
+{% endif %}
+{% endfor %}
+
+                        Ok(serde_json::Value::Object(result))
+                    }
+                    Err(e) => {
+                        error!("Failed to read {{ ds.name }} data source: {:?}", e);
+                        Err(sdk_error_to_provider_error(&e))
+                    }
+                }
+            }
+{% endfor %}
+            _ => Err(ProviderError::UnknownResource(format!(
+                "Unknown data source type: {}",
+                data_source_type
+            ))),
         }
     }
 }

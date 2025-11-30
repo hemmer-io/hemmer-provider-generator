@@ -88,6 +88,7 @@ impl AwsParser {
             name: self.service_name.clone(),
             sdk_version: self.sdk_version.clone(),
             resources,
+            data_sources: vec![], // Will implement data source detection later
         })
     }
 
@@ -110,6 +111,7 @@ impl AwsParser {
             name: self.service_name.clone(),
             sdk_version: self.sdk_version.clone(),
             resources: vec![self.create_s3_bucket_resource()],
+            data_sources: vec![], // Will implement data source detection later
         }
     }
 

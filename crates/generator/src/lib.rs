@@ -191,6 +191,7 @@ impl ProviderGenerator {
         context.insert("service_name", &self.service_def.name);
         context.insert("sdk_version", &self.service_def.sdk_version);
         context.insert("resources", &self.service_def.resources);
+        context.insert("data_sources", &self.service_def.data_sources);
 
         // Add SDK configuration for provider-agnostic template generation
         let sdk_config = self.service_def.provider.sdk_config();
@@ -579,6 +580,7 @@ mod tests {
             name: "s3".to_string(),
             sdk_version: "1.0.0".to_string(),
             resources: vec![],
+            data_sources: vec![], // Will implement data source detection later
         };
 
         let result = ProviderGenerator::new(service_def);

@@ -21,6 +21,7 @@ pub fn convert_discovery_to_service_definition(
         name: service_name.to_string(),
         sdk_version: api_version.to_string(),
         resources,
+        data_sources: vec![], // Will implement data source detection later
     })
 }
 

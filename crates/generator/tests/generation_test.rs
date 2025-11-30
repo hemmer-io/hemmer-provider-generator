@@ -14,6 +14,7 @@ fn test_generate_s3_provider() {
         provider: Provider::Aws,
         name: "s3".to_string(),
         sdk_version: "1.0.0".to_string(),
+        data_sources: vec![], // Will implement data source detection later
         resources: vec![ResourceDefinition {
             name: "bucket".to_string(),
             description: Some("S3 Bucket for object storage".to_string()),

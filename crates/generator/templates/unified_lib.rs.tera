@@ -84,7 +84,7 @@ impl {{ provider_name | capitalize }}Provider {
                 },
             },
             resources: Self::build_resource_schemas(),
-            data_sources: HashMap::new(),
+            data_sources: Self::build_data_source_schemas(),
         }
     }
 
@@ -126,6 +126,46 @@ impl {{ provider_name | capitalize }}Provider {
 {% endfor %}
 
         resources
+    }
+
+    /// Build data source schemas for all services
+    fn build_data_source_schemas() -> HashMap<String, Schema> {
+        let mut data_sources = HashMap::new();
+{% for service in services %}
+{% for ds in service.data_sources %}
+
+        // {{ service.name }}.{{ ds.name }}
+        data_sources.insert(
+            "{{ service.name }}_{{ ds.name }}".to_string(),
+            Schema {
+                version: 1,
+                block: Block {
+                    attributes: vec![
+{% for arg in ds.arguments %}
+                        Attribute {
+                            name: "{{ arg.name }}".to_string(),
+                            attr_type: {{ arg.field_type | sdk_attr_type }},
+                            flags: {% if arg.required %}AttributeFlags::REQUIRED{% else %}AttributeFlags::OPTIONAL{% endif %},
+                            description: {% if arg.description %}Some("{{ arg.description }}".to_string()){% else %}None{% endif %},
+                        },
+{% endfor %}
+{% for attr in ds.attributes %}
+                        Attribute {
+                            name: "{{ attr.name }}".to_string(),
+                            attr_type: {{ attr.field_type | sdk_attr_type }},
+                            flags: AttributeFlags::COMPUTED,
+                            description: {% if attr.description %}Some("{{ attr.description }}".to_string()){% else %}None{% endif %},
+                        },
+{% endfor %}
+                    ],
+                    block_types: vec![],
+                },
+            },
+        );
+{% endfor %}
+{% endfor %}
+
+        data_sources
     }
 }
 
@@ -388,6 +428,44 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
                 {{ service.name }}::import_resource(&resource_name, client, id).await
 {% else %}
                 {{ service.name }}::import_resource(&resource_name, &self.config, id).await
+{% endif %}
+            }
+{% endfor %}
+            _ => Err(ProviderError::UnknownResource(format!(
+                "Unknown service: {}",
+                service_name
+            ))),
+        }
+    }
+
+    async fn read_data_source(
+        &self,
+        data_source_type: &str,
+        config: serde_json::Value,
+    ) -> Result<serde_json::Value, ProviderError> {
+        info!("Reading {} data source", data_source_type);
+
+        // Parse data source type: service_datasource format
+        let parts: Vec<&str> = data_source_type.split('_').collect();
+        if parts.len() < 2 {
+            return Err(ProviderError::Validation(format!(
+                "Invalid data source type: {}",
+                data_source_type
+            )));
+        }
+
+        let service_name = parts[0];
+        let ds_name = parts[1..].join("_");
+
+        match service_name {
+{% for service in services %}
+            "{{ service.name }}" => {
+{% if provider | has_config_crate %}
+                let client = self.get_{{ service.name }}_client().await
+                    .map_err(|e| ProviderError::Configuration(e.to_string()))?;
+                {{ service.name }}::read_data_source(&ds_name, client, config).await
+{% else %}
+                {{ service.name }}::read_data_source(&ds_name, &self.config, config).await
 {% endif %}
             }
 {% endfor %}
