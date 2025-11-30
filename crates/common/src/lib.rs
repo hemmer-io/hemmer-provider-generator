@@ -205,6 +205,8 @@ pub struct ServiceDefinition {
     pub sdk_version: String,
     /// Resources discovered in this service
     pub resources: Vec<ResourceDefinition>,
+    /// Data sources for read-only lookups
+    pub data_sources: Vec<DataSourceDefinition>,
 }
 
 /// Definition of a single resource type (e.g., S3 Bucket, EC2 Instance)
@@ -222,6 +224,21 @@ pub struct ResourceDefinition {
     pub operations: Operations,
     /// Primary identifier field name (e.g., "bucket_name", "id")
     pub id_field: Option<String>,
+}
+
+/// Definition of a data source (read-only resource lookup)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataSourceDefinition {
+    /// Data source name (e.g., "vpc", "ami")
+    pub name: String,
+    /// Human-readable description
+    pub description: Option<String>,
+    /// Input arguments/filters for the lookup
+    pub arguments: Vec<FieldDefinition>,
+    /// Output attributes returned from the data source
+    pub attributes: Vec<FieldDefinition>,
+    /// SDK operation to fetch the data
+    pub read_operation: OperationMapping,
 }
 
 /// CRUD operations mapped from SDK operations
@@ -694,6 +711,7 @@ mod tests {
             name: "s3".to_string(),
             sdk_version: "1.0.0".to_string(),
             resources: vec![],
+            data_sources: vec![],  // Will implement data source detection later
         };
 
         assert_eq!(service.provider, Provider::Aws);
@@ -713,6 +731,7 @@ mod tests {
                 name: self.service_name.clone(),
                 sdk_version: self.sdk_version.clone(),
                 resources: vec![],
+                data_sources: vec![],  // Will implement data source detection later
             })
         }
 

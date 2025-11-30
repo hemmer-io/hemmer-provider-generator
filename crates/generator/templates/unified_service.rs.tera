@@ -86,6 +86,25 @@ pub async fn import_resource(
         ))),
     }
 }
+
+/// Read a data source in the {{ service.name }} service
+pub async fn read_data_source(
+    data_source_type: &str,
+    client: {{ provider | client_type(service_name=service.name) }},
+    config: serde_json::Value,
+) -> Result<serde_json::Value, hemmer_provider_sdk::ProviderError> {
+    info!("Reading {}.{} data source", "{{ service.name }}", data_source_type);
+    match data_source_type {
+{% for ds in service.data_sources %}
+        "{{ ds.name }}" => resources::{{ ds.name | sanitize_identifier_part }}::read_data_source(client, config).await,
+{% endfor %}
+        _ => Err(hemmer_provider_sdk::ProviderError::UnknownResource(format!(
+            "Unknown data source: {}.{}",
+            "{{ service.name }}",
+            data_source_type
+        ))),
+    }
+}
 {% else %}
 /// Create a resource in the {{ service.name }} service
 pub async fn create_resource(
@@ -162,6 +181,25 @@ pub async fn import_resource(
             "Unknown resource: {}.{}",
             "{{ service.name }}",
             resource_name
+        ))),
+    }
+}
+
+/// Read a data source in the {{ service.name }} service
+pub async fn read_data_source(
+    data_source_type: &str,
+    config: &HashMap<String, String>,
+    config_value: serde_json::Value,
+) -> Result<serde_json::Value, hemmer_provider_sdk::ProviderError> {
+    info!("Reading {}.{} data source", "{{ service.name }}", data_source_type);
+    match data_source_type {
+{% for ds in service.data_sources %}
+        "{{ ds.name }}" => resources::{{ ds.name | sanitize_identifier_part }}::read_data_source(config, config_value).await,
+{% endfor %}
+        _ => Err(hemmer_provider_sdk::ProviderError::UnknownResource(format!(
+            "Unknown data source: {}.{}",
+            "{{ service.name }}",
+            data_source_type
         ))),
     }
 }
