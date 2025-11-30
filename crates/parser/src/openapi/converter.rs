@@ -141,6 +141,7 @@ fn build_resource_from_operations(
         description,
         fields,
         outputs,
+        id_field: None, // Will implement ID detection later
         operations: Operations {
             create: ops.create.and_then(|op| {
                 op.operation_id.map(|id| OperationMapping {
@@ -166,6 +167,7 @@ fn build_resource_from_operations(
                     additional_operations: vec![],
                 })
             }),
+            import: None, // Will implement later
         },
     }))
 }

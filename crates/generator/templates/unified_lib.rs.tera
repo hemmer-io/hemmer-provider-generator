@@ -359,6 +359,44 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
             _ => Err(format!("Unknown service: {}", service_name)),
         }
     }
+
+    async fn import_resource(
+        &self,
+        resource_type: &str,
+        id: &str,
+    ) -> Result<Vec<ImportedResource>, ProviderError> {
+        info!("Importing {} resource with id: {}", resource_type, id);
+
+        // Parse resource type: service_resource format
+        let parts: Vec<&str> = resource_type.split('_').collect();
+        if parts.len() < 2 {
+            return Err(ProviderError::Validation(format!(
+                "Invalid resource type: {}",
+                resource_type
+            )));
+        }
+
+        let service_name = parts[0];
+        let resource_name = parts[1..].join("_");
+
+        match service_name {
+{% for service in services %}
+            "{{ service.name }}" => {
+{% if provider | has_config_crate %}
+                let client = self.get_{{ service.name }}_client().await
+                    .map_err(|e| ProviderError::Configuration(e))?;
+                {{ service.name }}::import_resource(&resource_name, client, id).await
+{% else %}
+                {{ service.name }}::import_resource(&resource_name, &self.config, id).await
+{% endif %}
+            }
+{% endfor %}
+            _ => Err(ProviderError::UnknownResource(format!(
+                "Unknown service: {}",
+                service_name
+            ))),
+        }
+    }
 }
 
 #[cfg(test)]

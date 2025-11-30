@@ -67,6 +67,25 @@ pub async fn delete_resource(
         _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
     }
 }
+
+/// Import an existing resource in the {{ service.name }} service
+pub async fn import_resource(
+    resource_name: &str,
+    client: {{ provider | client_type(service_name=service.name) }},
+    id: &str,
+) -> Result<Vec<hemmer_provider_sdk::ImportedResource>, hemmer_provider_sdk::ProviderError> {
+    info!("Importing {}.{} with id: {}", "{{ service.name }}", resource_name, id);
+    match resource_name {
+{% for resource in service.resources %}
+        "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::import(client, id).await,
+{% endfor %}
+        _ => Err(hemmer_provider_sdk::ProviderError::UnknownResource(format!(
+            "Unknown resource: {}.{}",
+            "{{ service.name }}",
+            resource_name
+        ))),
+    }
+}
 {% else %}
 /// Create a resource in the {{ service.name }} service
 pub async fn create_resource(
@@ -125,6 +144,25 @@ pub async fn delete_resource(
         "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::delete(config, current).await,
 {% endfor %}
         _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
+    }
+}
+
+/// Import an existing resource in the {{ service.name }} service
+pub async fn import_resource(
+    resource_name: &str,
+    config: &HashMap<String, String>,
+    id: &str,
+) -> Result<Vec<hemmer_provider_sdk::ImportedResource>, hemmer_provider_sdk::ProviderError> {
+    info!("Importing {}.{} with id: {}", "{{ service.name }}", resource_name, id);
+    match resource_name {
+{% for resource in service.resources %}
+        "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::import(config, id).await,
+{% endfor %}
+        _ => Err(hemmer_provider_sdk::ProviderError::UnknownResource(format!(
+            "Unknown resource: {}.{}",
+            "{{ service.name }}",
+            resource_name
+        ))),
     }
 }
 {% endif %}

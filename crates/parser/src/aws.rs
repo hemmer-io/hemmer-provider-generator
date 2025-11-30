@@ -170,6 +170,7 @@ impl AwsParser {
                     response_accessor: Some("arn".to_string()),
                 },
             ],
+            id_field: None, // Will implement ID detection later
             operations: Operations {
                 create: Some(OperationMapping {
                     sdk_operation: "create_bucket".to_string(),
@@ -187,6 +188,7 @@ impl AwsParser {
                     sdk_operation: "delete_bucket".to_string(),
                     additional_operations: vec![],
                 }),
+                import: None, // Will implement later
             },
         }
     }
@@ -224,6 +226,7 @@ impl AwsParser {
             read: None,
             update: None,
             delete: None,
+            import: None, // Will implement later
         };
 
         let mut create_input_struct = None;
@@ -289,6 +292,7 @@ impl AwsParser {
             )),
             fields,
             outputs,
+            id_field: None, // Will implement ID detection later
             operations: ops,
         }
     }

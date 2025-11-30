@@ -47,6 +47,7 @@ fn test_generate_unified_aws_provider() {
                 description: Some("The ARN of the bucket".to_string()),
                 response_accessor: Some("arn".to_string()),
             }],
+            id_field: None, // Will implement ID detection later
             operations: Operations {
                 create: Some(OperationMapping {
                     sdk_operation: "create_bucket".to_string(),
@@ -61,6 +62,7 @@ fn test_generate_unified_aws_provider() {
                     sdk_operation: "delete_bucket".to_string(),
                     additional_operations: vec![],
                 }),
+                import: None, // Will implement later
             },
         }],
     };
@@ -101,6 +103,7 @@ fn test_generate_unified_aws_provider() {
                 description: Some("The ARN of the table".to_string()),
                 response_accessor: Some("table_arn".to_string()),
             }],
+            id_field: None, // Will implement ID detection later
             operations: Operations {
                 create: Some(OperationMapping {
                     sdk_operation: "create_table".to_string(),
@@ -118,6 +121,7 @@ fn test_generate_unified_aws_provider() {
                     sdk_operation: "delete_table".to_string(),
                     additional_operations: vec![],
                 }),
+                import: None, // Will implement later
             },
         }],
     };

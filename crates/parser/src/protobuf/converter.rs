@@ -154,6 +154,7 @@ fn build_resource_from_methods(
         description: None, // Could extract from proto comments in future
         fields,
         outputs,
+        id_field: None, // Will implement ID detection later
         operations: Operations {
             create: create_method.map(|m| OperationMapping {
                 sdk_operation: to_snake_case(m.name()),
@@ -171,6 +172,7 @@ fn build_resource_from_methods(
                 sdk_operation: to_snake_case(m.name()),
                 additional_operations: vec![],
             }),
+            import: None, // Will implement later
         },
     }))
 }

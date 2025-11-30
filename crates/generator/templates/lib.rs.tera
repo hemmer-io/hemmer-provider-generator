@@ -637,6 +637,115 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
             ))),
         }
     }
+
+    async fn import_resource(
+        &self,
+        resource_type: &str,
+        id: &str,
+    ) -> std::result::Result<Vec<ImportedResource>, ProviderError> {
+        info!("Importing {} resource with id: {}", resource_type, id);
+
+{% if provider | has_config_crate %}
+        let client = self.get_client().await
+            .map_err(|e| ProviderError::Configuration(e.to_string()))?;
+{% endif %}
+
+        match resource_type {
+{% for resource in resources %}
+            "{{ resource.name }}" => {
+{% if resource.operations.import or resource.operations.read %}
+                debug!("Importing {{ resource.name }} with id: {}", id);
+
+                // Build the SDK request using import or read operation
+                let mut request = client.{{ resource.operations.import.sdk_operation | default(value=resource.operations.read.sdk_operation) }}();
+
+                // Set the ID field
+{% if resource.id_field %}
+                request = request.{{ resource.id_field }}(id);
+{% else %}
+                // Default to first required+immutable field or "name"
+{% for field in resource.fields %}
+{% if field.required and field.immutable %}
+                request = request.{{ field.name }}(id);
+{% break %}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+                match request.send().await {
+                    Ok(response) => {
+                        debug!("Successfully imported {{ resource.name }}");
+
+                        // Build state from response
+                        let mut state = serde_json::Map::new();
+
+                        // Set the ID field
+{% if resource.id_field %}
+                        state.insert("{{ resource.id_field }}".to_string(), serde_json::Value::String(id.to_string()));
+{% else %}
+{% for field in resource.fields %}
+{% if field.required and field.immutable %}
+                        state.insert("{{ field.name }}".to_string(), serde_json::Value::String(id.to_string()));
+{% break %}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+                        // Extract output fields from response
+{% for output_field in resource.outputs %}
+{% if output_field.response_accessor %}
+{% if output_field.field_type == "String" %}
+                        if let Some(val) = response.{{ output_field.response_accessor }}() {
+                            state.insert(
+                                "{{ output_field.name }}".to_string(),
+                                serde_json::Value::String(val.to_string()),
+                            );
+                        }
+{% elif output_field.field_type == "Integer" %}
+                        if let Some(val) = response.{{ output_field.response_accessor }}() {
+                            state.insert(
+                                "{{ output_field.name }}".to_string(),
+                                serde_json::Value::Number(serde_json::Number::from(*val)),
+                            );
+                        }
+{% elif output_field.field_type == "Boolean" %}
+                        if let Some(val) = response.{{ output_field.response_accessor }}() {
+                            state.insert(
+                                "{{ output_field.name }}".to_string(),
+                                serde_json::Value::Bool(*val),
+                            );
+                        }
+{% else %}
+                        if let Some(val) = response.{{ output_field.response_accessor }}() {
+                            state.insert(
+                                "{{ output_field.name }}".to_string(),
+                                serde_json::Value::String(format!("{:?}", val)),
+                            );
+                        }
+{% endif %}
+{% endif %}
+{% endfor %}
+
+                        Ok(vec![ImportedResource::new(
+                            resource_type,
+                            serde_json::Value::Object(state),
+                        )])
+                    }
+                    Err(e) => {
+                        error!("Failed to import {{ resource.name }}: {:?}", e);
+                        Err(sdk_error_to_provider_error(&e))
+                    }
+                }
+{% else %}
+                Err(ProviderError::Unimplemented(format!(
+                    "Import not supported for {{ resource.name }}"
+                )))
+{% endif %}
+            }
+{% endfor %}
+            _ => Err(ProviderError::UnknownResource(resource_type.to_string())),
+        }
+    }
 }
 
 #[cfg(test)]
