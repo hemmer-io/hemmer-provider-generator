@@ -711,7 +711,7 @@ mod tests {
             name: "s3".to_string(),
             sdk_version: "1.0.0".to_string(),
             resources: vec![],
-            data_sources: vec![],  // Will implement data source detection later
+            data_sources: vec![], // Will implement data source detection later
         };
 
         assert_eq!(service.provider, Provider::Aws);
@@ -731,7 +731,7 @@ mod tests {
                 name: self.service_name.clone(),
                 sdk_version: self.sdk_version.clone(),
                 resources: vec![],
-                data_sources: vec![],  // Will implement data source detection later
+                data_sources: vec![], // Will implement data source detection later
             })
         }
 

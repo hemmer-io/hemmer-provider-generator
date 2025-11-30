@@ -15,7 +15,7 @@ fn test_generate_unified_aws_provider() {
         provider: Provider::Aws,
         name: "s3".to_string(),
         sdk_version: "1.0.0".to_string(),
-        data_sources: vec![],  // Will implement data source detection later
+        data_sources: vec![], // Will implement data source detection later
         resources: vec![ResourceDefinition {
             name: "bucket".to_string(),
             description: Some("S3 bucket resource".to_string()),
@@ -72,7 +72,7 @@ fn test_generate_unified_aws_provider() {
         provider: Provider::Aws,
         name: "dynamodb".to_string(),
         sdk_version: "1.0.0".to_string(),
-        data_sources: vec![],  // Will implement data source detection later
+        data_sources: vec![], // Will implement data source detection later
         resources: vec![ResourceDefinition {
             name: "table".to_string(),
             description: Some("DynamoDB table resource".to_string()),
