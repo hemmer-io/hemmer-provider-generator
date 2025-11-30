@@ -47,6 +47,7 @@ fn test_generate_s3_provider() {
                 description: Some("Amazon Resource Name".to_string()),
                 response_accessor: Some("arn".to_string()),
             }],
+            blocks: vec![],
             id_field: None, // Will implement ID detection later
             operations: Operations {
                 create: Some(OperationMapping {

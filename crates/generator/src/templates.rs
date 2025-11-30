@@ -25,6 +25,7 @@ pub fn load_templates() -> Result<Tera> {
     tera.register_filter("sanitize_identifier_part", sanitize_identifier_part_filter);
     tera.register_filter("to_camel_case", to_camel_case_filter);
     tera.register_filter("json_extractor", json_extractor_filter);
+    tera.register_filter("nesting_mode", nesting_mode_filter);
 
     // Add templates inline for now (Phase 3 MVP)
     // In production, these could be loaded from files
@@ -98,6 +99,7 @@ pub fn load_unified_templates() -> Result<Tera> {
     tera.register_filter("sanitize_identifier_part", sanitize_identifier_part_filter);
     tera.register_filter("to_camel_case", to_camel_case_filter);
     tera.register_filter("json_extractor", json_extractor_filter);
+    tera.register_filter("nesting_mode", nesting_mode_filter);
 
     // Add unified templates
     tera.add_raw_template(
@@ -668,4 +670,22 @@ fn json_extractor_filter(value: &Value, _args: &HashMap<String, Value>) -> tera:
     };
 
     Ok(Value::String(extractor.to_string()))
+}
+
+/// Filter to convert NestingMode to SDK enum variant
+/// Usage: {{ block.nesting_mode | nesting_mode }}
+fn nesting_mode_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
+    use hemmer_provider_generator_common::NestingMode;
+
+    let mode: NestingMode = serde_json::from_value(value.clone())
+        .map_err(|e| tera::Error::msg(format!("Failed to deserialize NestingMode: {}", e)))?;
+
+    let sdk_mode = match mode {
+        NestingMode::Single => "NestingMode::Single",
+        NestingMode::List => "NestingMode::List",
+        NestingMode::Set => "NestingMode::Set",
+        NestingMode::Map => "NestingMode::Map",
+    };
+
+    Ok(Value::String(sdk_mode.to_string()))
 }

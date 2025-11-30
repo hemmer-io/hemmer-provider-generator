@@ -48,6 +48,7 @@ fn test_generate_unified_aws_provider() {
                 description: Some("The ARN of the bucket".to_string()),
                 response_accessor: Some("arn".to_string()),
             }],
+            blocks: vec![],
             id_field: None, // Will implement ID detection later
             operations: Operations {
                 create: Some(OperationMapping {
@@ -105,6 +106,7 @@ fn test_generate_unified_aws_provider() {
                 description: Some("The ARN of the table".to_string()),
                 response_accessor: Some("table_arn".to_string()),
             }],
+            blocks: vec![],
             id_field: None, // Will implement ID detection later
             operations: Operations {
                 create: Some(OperationMapping {

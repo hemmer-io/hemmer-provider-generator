@@ -209,6 +209,38 @@ pub struct ServiceDefinition {
     pub data_sources: Vec<DataSourceDefinition>,
 }
 
+/// Nesting mode for block types
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum NestingMode {
+    /// Exactly one block (e.g., `logging { ... }`)
+    Single,
+    /// Ordered list of blocks (e.g., `rule { ... } rule { ... }`)
+    List,
+    /// Unordered set of blocks
+    Set,
+    /// Map of blocks keyed by an attribute
+    Map,
+}
+
+/// Definition of a nested block type within a resource
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlockDefinition {
+    /// Block type name (e.g., "lifecycle_rule", "ingress")
+    pub name: String,
+    /// Human-readable description
+    pub description: Option<String>,
+    /// Nested attributes within this block
+    pub attributes: Vec<FieldDefinition>,
+    /// Further nested blocks (recursive)
+    pub blocks: Vec<BlockDefinition>,
+    /// Nesting mode: single, list, set, map
+    pub nesting_mode: NestingMode,
+    /// Minimum number of occurrences (0 for optional)
+    pub min_items: u32,
+    /// Maximum number of occurrences (0 for unlimited)
+    pub max_items: u32,
+}
+
 /// Definition of a single resource type (e.g., S3 Bucket, EC2 Instance)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceDefinition {
@@ -220,6 +252,8 @@ pub struct ResourceDefinition {
     pub fields: Vec<FieldDefinition>,
     /// Output fields returned after operations
     pub outputs: Vec<FieldDefinition>,
+    /// Nested block types (e.g., lifecycle_rule, ingress)
+    pub blocks: Vec<BlockDefinition>,
     /// CRUD operations available for this resource
     pub operations: Operations,
     /// Primary identifier field name (e.g., "bucket_name", "id")

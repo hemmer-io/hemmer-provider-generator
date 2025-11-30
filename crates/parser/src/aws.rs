@@ -172,6 +172,8 @@ impl AwsParser {
                     response_accessor: Some("arn".to_string()),
                 },
             ],
+            // Nested blocks will be detected in future parser enhancements
+            blocks: vec![],
             id_field: None, // Will implement ID detection later
             operations: Operations {
                 create: Some(OperationMapping {
@@ -294,6 +296,8 @@ impl AwsParser {
             )),
             fields,
             outputs,
+            // Nested blocks will be detected in future parser enhancements
+            blocks: vec![],
             id_field: None, // Will implement ID detection later
             operations: ops,
         }

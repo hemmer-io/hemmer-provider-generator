@@ -13,7 +13,7 @@
 {% endfor %}
 
 use hemmer_provider_sdk::{
-    Attribute, AttributeFlags, AttributeType, Block, PlanResult, ProviderSchema, ProviderService,
+    Attribute, AttributeFlags, AttributeType, Block, BlockType, NestingMode, PlanResult, ProviderSchema, ProviderService,
     Schema,
     // Protocol versioning - re-export for visibility
     PROTOCOL_VERSION, MIN_PROTOCOL_VERSION, check_protocol_version,
@@ -118,7 +118,33 @@ impl {{ provider_name | capitalize }}Provider {
                         },
 {% endfor %}
                     ],
-                    block_types: vec![],
+                    block_types: vec![
+{% for block in resource.blocks %}
+                        // {{ block.name }} block
+                        BlockType {
+                            nesting_mode: {{ block.nesting_mode | nesting_mode }},
+                            block: Block {
+                                attributes: vec![
+{% for attr in block.attributes %}
+                                    Attribute {
+                                        name: "{{ attr.name }}".to_string(),
+                                        attr_type: {{ attr.field_type | sdk_attr_type }},
+                                        flags: {% if attr.required %}AttributeFlags::REQUIRED{% else %}AttributeFlags::OPTIONAL{% endif %}{% if attr.sensitive %} | AttributeFlags::SENSITIVE{% endif %},
+                                        description: {% if attr.description %}Some("{{ attr.description }}".to_string()){% else %}None{% endif %},
+                                    },
+{% endfor %}
+                                ],
+                                block_types: vec![
+                                    // TODO: Support recursive nested blocks (currently limited to 1 level)
+{% for nested_block in block.blocks %}
+{% endfor %}
+                                ],
+                            },
+                            min_items: {{ block.min_items }},
+                            max_items: {{ block.max_items }},
+                        },
+{% endfor %}
+                    ],
                 },
             },
         );
