@@ -132,8 +132,8 @@ fn test_generate_s3_provider() {
         "Should have AWS SDK dependency"
     );
     assert!(
-        cargo_toml.contains("hemmer-provider-sdk = \"0.2\""),
-        "Should have Hemmer SDK 0.2+ dependency for protocol versioning"
+        cargo_toml.contains("hemmer-provider-sdk = \"0.3\""),
+        "Should have Hemmer SDK 0.3+ dependency for ProviderError variants"
     );
     assert!(
         cargo_toml.contains("[[bin]]"),

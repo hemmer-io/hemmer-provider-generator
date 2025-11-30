@@ -13,8 +13,8 @@ name = "hemmer-{{ service_name }}-provider"
 path = "src/main.rs"
 
 [dependencies]
-# Hemmer provider SDK (0.2+ required for protocol versioning)
-hemmer-provider-sdk = "0.2"
+# Hemmer provider SDK (0.3+ required for ProviderError variants)
+hemmer-provider-sdk = "0.3"
 
 # Cloud SDK dependencies
 {% if provider == "Aws" %}aws-sdk-{{ service_name }} = "1"
