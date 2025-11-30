@@ -220,6 +220,8 @@ pub struct ResourceDefinition {
     pub outputs: Vec<FieldDefinition>,
     /// CRUD operations available for this resource
     pub operations: Operations,
+    /// Primary identifier field name (e.g., "bucket_name", "id")
+    pub id_field: Option<String>,
 }
 
 /// CRUD operations mapped from SDK operations
@@ -233,6 +235,8 @@ pub struct Operations {
     pub update: Option<OperationMapping>,
     /// Delete operation (e.g., DeleteBucket)
     pub delete: Option<OperationMapping>,
+    /// Import operation (often same as read, e.g., HeadBucket)
+    pub import: Option<OperationMapping>,
 }
 
 /// Mapping of a CRUD operation to SDK operation(s)

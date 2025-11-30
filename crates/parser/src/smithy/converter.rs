@@ -160,6 +160,7 @@ fn build_resource_from_operations(
         description: Some(format!("{} resource", resource_name)),
         fields,
         outputs,
+        id_field: None, // Will implement ID detection later
         operations: Operations {
             create: create_op.map(|op| OperationMapping {
                 sdk_operation: to_snake_case(&op),
@@ -177,6 +178,7 @@ fn build_resource_from_operations(
                 sdk_operation: to_snake_case(&op),
                 additional_operations: vec![],
             }),
+            import: None, // Will implement later
         },
     }))
 }

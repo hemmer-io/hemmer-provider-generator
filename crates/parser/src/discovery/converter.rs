@@ -163,6 +163,7 @@ fn build_resource_from_methods(
         description,
         fields,
         outputs,
+        id_field: None, // Will implement ID detection later
         operations: Operations {
             create: methods.create.map(|m| OperationMapping {
                 sdk_operation: to_snake_case(m.id.split('.').next_back().unwrap_or(&m.id)),
@@ -180,6 +181,7 @@ fn build_resource_from_methods(
                 sdk_operation: to_snake_case(m.id.split('.').next_back().unwrap_or(&m.id)),
                 additional_operations: vec![],
             }),
+            import: None, // Will implement later
         },
     }))
 }

@@ -46,6 +46,7 @@ fn test_generate_s3_provider() {
                 description: Some("Amazon Resource Name".to_string()),
                 response_accessor: Some("arn".to_string()),
             }],
+            id_field: None, // Will implement ID detection later
             operations: Operations {
                 create: Some(OperationMapping {
                     sdk_operation: "create_bucket".to_string(),
@@ -63,6 +64,7 @@ fn test_generate_s3_provider() {
                     sdk_operation: "delete_bucket".to_string(),
                     additional_operations: vec![],
                 }),
+                import: None, // Will implement later
             },
         }],
     };
