@@ -1,8 +1,8 @@
 //! Integration test for unified multi-service provider generation
 
 use hemmer_provider_generator_common::{
-    FieldDefinition, FieldType, OperationMapping, Operations, Provider, ProviderDefinition,
-    ResourceDefinition, ServiceDefinition,
+    BlockDefinition, FieldDefinition, FieldType, NestingMode, OperationMapping, Operations,
+    Provider, ProviderDefinition, ResourceDefinition, ServiceDefinition,
 };
 use hemmer_provider_generator_generator::UnifiedProviderGenerator;
 use std::fs;
@@ -48,6 +48,7 @@ fn test_generate_unified_aws_provider() {
                 description: Some("The ARN of the bucket".to_string()),
                 response_accessor: Some("arn".to_string()),
             }],
+            blocks: vec![],
             id_field: None, // Will implement ID detection later
             operations: Operations {
                 create: Some(OperationMapping {
@@ -104,6 +105,43 @@ fn test_generate_unified_aws_provider() {
                 immutable: false,
                 description: Some("The ARN of the table".to_string()),
                 response_accessor: Some("table_arn".to_string()),
+            }],
+            blocks: vec![BlockDefinition {
+                name: "global_secondary_index".to_string(),
+                description: Some("Global secondary index configuration".to_string()),
+                attributes: vec![
+                    FieldDefinition {
+                        name: "index_name".to_string(),
+                        field_type: FieldType::String,
+                        required: true,
+                        sensitive: false,
+                        immutable: false,
+                        description: Some("Name of the index".to_string()),
+                        response_accessor: None,
+                    },
+                    FieldDefinition {
+                        name: "hash_key".to_string(),
+                        field_type: FieldType::String,
+                        required: true,
+                        sensitive: false,
+                        immutable: false,
+                        description: Some("Hash key attribute name".to_string()),
+                        response_accessor: None,
+                    },
+                    FieldDefinition {
+                        name: "range_key".to_string(),
+                        field_type: FieldType::String,
+                        required: false,
+                        sensitive: false,
+                        immutable: false,
+                        description: Some("Range key attribute name".to_string()),
+                        response_accessor: None,
+                    },
+                ],
+                blocks: vec![], // Could have nested projection blocks
+                nesting_mode: NestingMode::List,
+                min_items: 0,
+                max_items: 20, // DynamoDB limit
             }],
             id_field: None, // Will implement ID detection later
             operations: Operations {

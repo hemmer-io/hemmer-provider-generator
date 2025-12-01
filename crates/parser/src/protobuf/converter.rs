@@ -155,6 +155,8 @@ fn build_resource_from_methods(
         description: None, // Could extract from proto comments in future
         fields,
         outputs,
+        // Nested blocks will be detected in future parser enhancements
+        blocks: vec![],
         id_field: None, // Will implement ID detection later
         operations: Operations {
             create: create_method.map(|m| OperationMapping {

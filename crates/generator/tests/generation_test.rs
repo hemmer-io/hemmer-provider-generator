@@ -1,8 +1,8 @@
 //! Integration test for provider generation
 
 use hemmer_provider_generator_common::{
-    FieldDefinition, FieldType, OperationMapping, Operations, Provider, ResourceDefinition,
-    ServiceDefinition,
+    BlockDefinition, FieldDefinition, FieldType, NestingMode, OperationMapping, Operations,
+    Provider, ResourceDefinition, ServiceDefinition,
 };
 use hemmer_provider_generator_generator::ProviderGenerator;
 use tempfile::TempDir;
@@ -46,6 +46,52 @@ fn test_generate_s3_provider() {
                 immutable: true,
                 description: Some("Amazon Resource Name".to_string()),
                 response_accessor: Some("arn".to_string()),
+            }],
+            blocks: vec![BlockDefinition {
+                name: "lifecycle_rule".to_string(),
+                description: Some("Lifecycle configuration rule".to_string()),
+                attributes: vec![
+                    FieldDefinition {
+                        name: "id".to_string(),
+                        field_type: FieldType::String,
+                        required: true,
+                        sensitive: false,
+                        immutable: false,
+                        description: Some("Unique identifier for the rule".to_string()),
+                        response_accessor: None,
+                    },
+                    FieldDefinition {
+                        name: "enabled".to_string(),
+                        field_type: FieldType::Boolean,
+                        required: false,
+                        sensitive: false,
+                        immutable: false,
+                        description: Some("Whether the rule is enabled".to_string()),
+                        response_accessor: None,
+                    },
+                    FieldDefinition {
+                        name: "prefix".to_string(),
+                        field_type: FieldType::String,
+                        required: false,
+                        sensitive: false,
+                        immutable: false,
+                        description: Some("Object key prefix filter".to_string()),
+                        response_accessor: None,
+                    },
+                    FieldDefinition {
+                        name: "expiration_days".to_string(),
+                        field_type: FieldType::Integer,
+                        required: false,
+                        sensitive: false,
+                        immutable: false,
+                        description: Some("Number of days until objects expire".to_string()),
+                        response_accessor: None,
+                    },
+                ],
+                blocks: vec![], // Nested blocks would go here (e.g., transition, expiration)
+                nesting_mode: NestingMode::List,
+                min_items: 0,
+                max_items: 0, // 0 = unlimited
             }],
             id_field: None, // Will implement ID detection later
             operations: Operations {
@@ -175,6 +221,28 @@ fn test_generate_s3_provider() {
     assert!(
         lib_rs.contains("SDK_PROTOCOL_VERSION"),
         "Should re-export protocol version for consumers"
+    );
+
+    // Check nested block generation
+    assert!(
+        lib_rs.contains("BlockType"),
+        "Should import BlockType for nested blocks"
+    );
+    assert!(
+        lib_rs.contains("NestingMode"),
+        "Should import NestingMode for nested blocks"
+    );
+    assert!(
+        lib_rs.contains("lifecycle_rule"),
+        "Should include lifecycle_rule block"
+    );
+    assert!(
+        lib_rs.contains("NestingMode::List"),
+        "Should specify List nesting mode for lifecycle_rule"
+    );
+    assert!(
+        lib_rs.contains("expiration_days"),
+        "Should include lifecycle_rule attributes"
     );
 
     println!("✅ Provider generated successfully to: {:?}", output_path);

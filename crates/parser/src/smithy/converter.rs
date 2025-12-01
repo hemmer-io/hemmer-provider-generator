@@ -161,6 +161,8 @@ fn build_resource_from_operations(
         description: Some(format!("{} resource", resource_name)),
         fields,
         outputs,
+        // Nested blocks will be detected in future parser enhancements
+        blocks: vec![],
         id_field: None, // Will implement ID detection later
         operations: Operations {
             create: create_op.map(|op| OperationMapping {
