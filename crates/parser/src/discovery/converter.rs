@@ -153,12 +153,11 @@ fn build_resource_from_methods(
     };
 
     // Detect nested blocks from create/update method
-    let blocks =
-        if let Some(ref create_method) = methods.create.as_ref().or(methods.update.as_ref()) {
-            extract_blocks_from_method(doc, create_method)?
-        } else {
-            Vec::new()
-        };
+    let blocks = if let Some(create_method) = methods.create.as_ref().or(methods.update.as_ref()) {
+        extract_blocks_from_method(doc, create_method)?
+    } else {
+        Vec::new()
+    };
 
     // Get description
     let description = methods

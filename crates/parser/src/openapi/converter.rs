@@ -131,7 +131,7 @@ fn build_resource_from_operations(
     };
 
     // Detect nested blocks from create/update operation
-    let blocks = if let Some(ref create_op) = ops.create.as_ref().or(ops.update.as_ref()) {
+    let blocks = if let Some(create_op) = ops.create.as_ref().or(ops.update.as_ref()) {
         extract_blocks_from_operation(spec, create_op)?
     } else {
         Vec::new()
@@ -674,8 +674,8 @@ fn extract_type_name_from_ref(ref_or_name: &str) -> String {
     if ref_or_name.contains('#') || ref_or_name.contains('/') {
         ref_or_name
             .split('/')
-            .last()
-            .and_then(|s| s.split('.').last())
+            .next_back()
+            .and_then(|s| s.split('.').next_back())
             .unwrap_or(ref_or_name)
             .to_string()
     } else {

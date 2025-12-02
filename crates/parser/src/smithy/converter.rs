@@ -157,7 +157,7 @@ fn build_resource_from_operations(
     };
 
     // Detect nested blocks from create/update operation inputs
-    let blocks = if let Some(ref op) = create_op.as_ref().or(update_op.as_ref()) {
+    let blocks = if let Some(op) = create_op.as_ref().or(update_op.as_ref()) {
         extract_blocks_from_operation(model, op)?
     } else {
         Vec::new()
@@ -404,11 +404,10 @@ fn is_complex_structure(
 
     // Check if any member is itself a structure or list
     for member in members.values() {
-        if let Some(shape) = model.get_shape(&member.target) {
-            match shape {
-                Shape::Structure { .. } | Shape::List { .. } | Shape::Map { .. } => return true,
-                _ => {}
-            }
+        if let Some(Shape::Structure { .. } | Shape::List { .. } | Shape::Map { .. }) =
+            model.get_shape(&member.target)
+        {
+            return true;
         }
     }
 

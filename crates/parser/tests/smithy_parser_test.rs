@@ -581,14 +581,20 @@ fn test_parse_smithy_with_recursive_nested_blocks() {
         .iter()
         .find(|a| a.name == "days")
         .expect("Should have days attribute");
-    assert_eq!(days_attr.field_type, hemmer_provider_generator_common::FieldType::Integer);
+    assert_eq!(
+        days_attr.field_type,
+        hemmer_provider_generator_common::FieldType::Integer
+    );
 
     let storage_class_attr = transitions_block
         .attributes
         .iter()
         .find(|a| a.name == "storage_class")
         .expect("Should have storage_class attribute");
-    assert_eq!(storage_class_attr.field_type, hemmer_provider_generator_common::FieldType::String);
+    assert_eq!(
+        storage_class_attr.field_type,
+        hemmer_provider_generator_common::FieldType::String
+    );
     assert!(
         storage_class_attr.required,
         "storage_class should be required"
@@ -596,6 +602,12 @@ fn test_parse_smithy_with_recursive_nested_blocks() {
 
     println!("✅ Successfully parsed Smithy model with 3-level nested blocks!");
     println!("   Level 1: lifecycle_configuration (Single)");
-    println!("   Level 2: rules (List) - {} attributes", rules_block.attributes.len());
-    println!("   Level 3: transitions (List) - {} attributes", transitions_block.attributes.len());
+    println!(
+        "   Level 2: rules (List) - {} attributes",
+        rules_block.attributes.len()
+    );
+    println!(
+        "   Level 3: transitions (List) - {} attributes",
+        transitions_block.attributes.len()
+    );
 }

@@ -169,7 +169,9 @@ fn test_generate_provider_with_recursive_nested_blocks() {
         .nth(1)
         .expect("Should have create function");
 
-    let lifecycle_config_count = create_section.matches("BucketLifecycleConfiguration").count();
+    let lifecycle_config_count = create_section
+        .matches("BucketLifecycleConfiguration")
+        .count();
     let lifecycle_rule_count = create_section.matches("LifecycleRule").count();
 
     assert!(
