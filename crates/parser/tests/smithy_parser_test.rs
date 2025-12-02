@@ -384,3 +384,218 @@ fn test_parse_smithy_with_nested_blocks() {
         lifecycle_rules_block.attributes.len()
     );
 }
+
+#[test]
+fn test_parse_smithy_with_recursive_nested_blocks() {
+    // Smithy model with 3 levels of nesting: Bucket → LifecycleRule → Transition
+    let smithy_json = r#"{
+        "smithy": "2.0",
+        "shapes": {
+            "com.example.storage#StorageService": {
+                "type": "service",
+                "version": "2023-01-01",
+                "operations": [
+                    { "target": "com.example.storage#PutBucketLifecycle" },
+                    { "target": "com.example.storage#GetBucketLifecycle" }
+                ]
+            },
+            "com.example.storage#PutBucketLifecycle": {
+                "type": "operation",
+                "input": {
+                    "target": "com.example.storage#PutBucketLifecycleInput"
+                }
+            },
+            "com.example.storage#PutBucketLifecycleInput": {
+                "type": "structure",
+                "members": {
+                    "Bucket": {
+                        "target": "smithy.api#String",
+                        "traits": { "smithy.api#required": {} }
+                    },
+                    "LifecycleConfiguration": {
+                        "target": "com.example.storage#BucketLifecycleConfiguration"
+                    }
+                }
+            },
+            "com.example.storage#GetBucketLifecycle": {
+                "type": "operation",
+                "input": {
+                    "target": "com.example.storage#GetBucketLifecycleInput"
+                },
+                "output": {
+                    "target": "com.example.storage#GetBucketLifecycleOutput"
+                }
+            },
+            "com.example.storage#GetBucketLifecycleInput": {
+                "type": "structure",
+                "members": {
+                    "Bucket": {
+                        "target": "smithy.api#String",
+                        "traits": { "smithy.api#required": {} }
+                    }
+                }
+            },
+            "com.example.storage#GetBucketLifecycleOutput": {
+                "type": "structure",
+                "members": {
+                    "LifecycleConfiguration": {
+                        "target": "com.example.storage#BucketLifecycleConfiguration"
+                    }
+                }
+            },
+            "com.example.storage#BucketLifecycleConfiguration": {
+                "type": "structure",
+                "members": {
+                    "Rules": {
+                        "target": "com.example.storage#LifecycleRuleList"
+                    }
+                }
+            },
+            "com.example.storage#LifecycleRuleList": {
+                "type": "list",
+                "member": {
+                    "target": "com.example.storage#LifecycleRule"
+                }
+            },
+            "com.example.storage#LifecycleRule": {
+                "type": "structure",
+                "members": {
+                    "Id": {
+                        "target": "smithy.api#String",
+                        "traits": {
+                            "smithy.api#required": {},
+                            "smithy.api#documentation": "Rule ID"
+                        }
+                    },
+                    "Status": {
+                        "target": "smithy.api#String"
+                    },
+                    "Prefix": {
+                        "target": "smithy.api#String"
+                    },
+                    "Transitions": {
+                        "target": "com.example.storage#TransitionList",
+                        "traits": {
+                            "smithy.api#documentation": "Transition actions"
+                        }
+                    }
+                }
+            },
+            "com.example.storage#TransitionList": {
+                "type": "list",
+                "member": {
+                    "target": "com.example.storage#Transition"
+                }
+            },
+            "com.example.storage#Transition": {
+                "type": "structure",
+                "members": {
+                    "Days": {
+                        "target": "smithy.api#Integer",
+                        "traits": {
+                            "smithy.api#documentation": "Days until transition"
+                        }
+                    },
+                    "StorageClass": {
+                        "target": "smithy.api#String",
+                        "traits": {
+                            "smithy.api#required": {},
+                            "smithy.api#documentation": "Target storage class"
+                        }
+                    }
+                }
+            }
+        }
+    }"#;
+
+    let parser = SmithyParser::from_json(smithy_json, "storage", "2023-01-01").unwrap();
+    let service_def = parser.parse().unwrap();
+
+    // Verify service metadata
+    assert_eq!(service_def.name, "storage");
+
+    // Find the bucket_lifecycle resource
+    let bucket_lifecycle = service_def
+        .resources
+        .iter()
+        .find(|r| r.name == "bucket_lifecycle")
+        .expect("Should have bucket_lifecycle resource");
+
+    // Verify top-level block (lifecycle_configuration)
+    assert_eq!(
+        bucket_lifecycle.blocks.len(),
+        1,
+        "Should have 1 top-level block"
+    );
+    let lifecycle_config = &bucket_lifecycle.blocks[0];
+    assert_eq!(lifecycle_config.name, "lifecycle_configuration");
+    assert_eq!(
+        lifecycle_config.sdk_type_name.as_deref(),
+        Some("BucketLifecycleConfiguration")
+    );
+    assert_eq!(
+        lifecycle_config.sdk_accessor_method.as_deref(),
+        Some("set_lifecycle_configuration")
+    );
+
+    // Verify second-level nested block (rules within lifecycle_configuration)
+    assert_eq!(
+        lifecycle_config.blocks.len(),
+        1,
+        "lifecycle_configuration should have 1 nested block"
+    );
+    let rules_block = &lifecycle_config.blocks[0];
+    assert_eq!(rules_block.name, "rules");
+    assert_eq!(rules_block.sdk_type_name.as_deref(), Some("LifecycleRule"));
+    assert_eq!(
+        rules_block.sdk_accessor_method.as_deref(),
+        Some("set_rules")
+    );
+    assert_eq!(rules_block.attributes.len(), 3, "Should have 3 attributes");
+
+    // Verify third-level nested block (transitions within rules)
+    assert_eq!(
+        rules_block.blocks.len(),
+        1,
+        "rules should have 1 nested block"
+    );
+    let transitions_block = &rules_block.blocks[0];
+    assert_eq!(transitions_block.name, "transitions");
+    assert_eq!(
+        transitions_block.sdk_type_name.as_deref(),
+        Some("Transition")
+    );
+    assert_eq!(
+        transitions_block.sdk_accessor_method.as_deref(),
+        Some("set_transitions")
+    );
+    assert_eq!(
+        transitions_block.attributes.len(),
+        2,
+        "Should have 2 attributes"
+    );
+
+    // Verify transition attributes
+    let days_attr = transitions_block
+        .attributes
+        .iter()
+        .find(|a| a.name == "days")
+        .expect("Should have days attribute");
+    assert_eq!(days_attr.field_type, hemmer_provider_generator_common::FieldType::Integer);
+
+    let storage_class_attr = transitions_block
+        .attributes
+        .iter()
+        .find(|a| a.name == "storage_class")
+        .expect("Should have storage_class attribute");
+    assert_eq!(storage_class_attr.field_type, hemmer_provider_generator_common::FieldType::String);
+    assert!(
+        storage_class_attr.required,
+        "storage_class should be required"
+    );
+
+    println!("✅ Successfully parsed Smithy model with 3-level nested blocks!");
+    println!("   Level 1: lifecycle_configuration (Single)");
+    println!("   Level 2: rules (List) - {} attributes", rules_block.attributes.len());
+    println!("   Level 3: transitions (List) - {} attributes", transitions_block.attributes.len());
+}
