@@ -701,12 +701,81 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
 
                         // Extract nested blocks from response
 {% for block in resource.blocks %}
-                        // TODO: Extract {{ block.name }} blocks from response
-                        // This requires SDK-specific knowledge of response structure
-                        // For now, preserve from current_state if present
+{% if block.sdk_accessor_method %}
+                        // Extract {{ block.name }} block
+                        if let Some(block_data) = response.{{ block.sdk_accessor_method }}() {
+{% if block.nesting_mode == "NestingMode::List" %}
+                            // List of {{ block.name }} blocks
+                            let block_array: Vec<serde_json::Value> = block_data
+                                .iter()
+                                .map(|item| {
+                                    let mut block_obj = serde_json::Map::new();
+{% for attr in block.attributes %}
+{% if attr.field_type == "String" %}
+                                    if let Some(val) = item.{{ attr.name }}() {
+                                        block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::String(val.to_string()));
+                                    }
+{% elif attr.field_type == "Integer" %}
+                                    if let Some(val) = item.{{ attr.name }}() {
+                                        block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::Number(serde_json::Number::from(*val)));
+                                    }
+{% elif attr.field_type == "Boolean" %}
+                                    if let Some(val) = item.{{ attr.name }}() {
+                                        block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::Bool(*val));
+                                    }
+{% elif attr.field_type == "Float" %}
+                                    if let Some(val) = item.{{ attr.name }}() {
+                                        if let Some(num) = serde_json::Number::from_f64(*val) {
+                                            block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::Number(num));
+                                        }
+                                    }
+{% else %}
+                                    if let Some(val) = item.{{ attr.name }}() {
+                                        block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::String(format!("{:?}", val)));
+                                    }
+{% endif %}
+{% endfor %}
+                                    serde_json::Value::Object(block_obj)
+                                })
+                                .collect();
+                            state.insert("{{ block.name }}".to_string(), serde_json::Value::Array(block_array));
+{% else %}
+                            // Single {{ block.name }} block
+                            let mut block_obj = serde_json::Map::new();
+{% for attr in block.attributes %}
+{% if attr.field_type == "String" %}
+                            if let Some(val) = block_data.{{ attr.name }}() {
+                                block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::String(val.to_string()));
+                            }
+{% elif attr.field_type == "Integer" %}
+                            if let Some(val) = block_data.{{ attr.name }}() {
+                                block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::Number(serde_json::Number::from(*val)));
+                            }
+{% elif attr.field_type == "Boolean" %}
+                            if let Some(val) = block_data.{{ attr.name }}() {
+                                block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::Bool(*val));
+                            }
+{% elif attr.field_type == "Float" %}
+                            if let Some(val) = block_data.{{ attr.name }}() {
+                                if let Some(num) = serde_json::Number::from_f64(*val) {
+                                    block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::Number(num));
+                                }
+                            }
+{% else %}
+                            if let Some(val) = block_data.{{ attr.name }}() {
+                                block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::String(format!("{:?}", val)));
+                            }
+{% endif %}
+{% endfor %}
+                            state.insert("{{ block.name }}".to_string(), serde_json::Value::Object(block_obj));
+{% endif %}
+                        }
+{% else %}
+                        // SDK metadata not available - preserve from current_state if present
                         if let Some(block_val) = current_state.get("{{ block.name }}") {
                             state.insert("{{ block.name }}".to_string(), block_val.clone());
                         }
+{% endif %}
 {% endfor %}
 
                         Ok(serde_json::Value::Object(state))
