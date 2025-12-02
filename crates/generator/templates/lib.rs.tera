@@ -309,28 +309,29 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
         info!("Configuring {{ service_name }} provider");
         debug!("Config: {:?}", config);
 
-{% if provider == "Aws" %}
-        // Load AWS config from environment, optionally using provided region/profile
-        let mut config_loader = aws_config::from_env();
+        // Initialize SDK config using provider-specific pattern
+        let mut {{ sdk_config.config_codegen.config_var_name }} = {{ sdk_config.config_codegen.init_snippet }};
 
-        if let Some(region) = config.get("region").and_then(|v| v.as_str()) {
-            info!("Using region: {}", region);
-            config_loader = config_loader.region(aws_config::Region::new(region.to_string()));
+        // Apply optional configuration attributes
+{% for attr in sdk_config.config_attrs %}
+{% if attr.setter_snippet %}
+        if let Some(val) = config.get("{{ attr.name }}").and_then(|v| v.{{ attr.value_extractor | default(value="as_str()") }}) {
+            info!("Using {{ attr.name }}: {}", val);
+            {{ attr.setter_snippet | replace(from="{value}", to="val") }};
         }
+{% endif %}
+{% endfor %}
 
-        if let Some(profile) = config.get("profile").and_then(|v| v.as_str()) {
-            info!("Using profile: {}", profile);
-            config_loader = config_loader.profile_name(profile);
-        }
+        // Load the configuration
+        let {{ sdk_config.config_codegen.loaded_config_var_name }} = {{ sdk_config.config_codegen.load_snippet }};
 
-        let sdk_config = config_loader.load().await;
-        let client = {{ provider | client_type(service_name=service_name) }}::new(&sdk_config);
+        // Create client from configuration
+        let client = {{ sdk_config.config_codegen.client_from_config | replace(from="{client_type}", to=provider | client_type(service_name=service_name)) | replace(from="{config}", to=sdk_config.config_codegen.loaded_config_var_name) }};
 
         // Store the client for later use
         let mut guard = self.client.write().await;
         *guard = Some(client);
         info!("{{ service_name | capitalize }} provider configured successfully");
-{% endif %}
 
         Ok(vec![])
     }

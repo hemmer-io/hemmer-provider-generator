@@ -60,9 +60,11 @@ pub struct ProviderSdkConfig {
     pub region_attr: Option<String>,
     /// Additional config attributes specific to this provider
     pub config_attrs: Vec<ProviderConfigAttr>,
+    /// Configuration code generation patterns
+    pub config_codegen: ConfigCodegen,
 }
 
-/// A provider-specific configuration attribute
+/// A provider-specific configuration attribute with code generation metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfigAttr {
     /// Attribute name (e.g., "profile", "project_id")
@@ -71,6 +73,43 @@ pub struct ProviderConfigAttr {
     pub description: String,
     /// Whether this attribute is required
     pub required: bool,
+    /// Code snippet for setting this config value
+    /// Uses {value} placeholder for the extracted JSON value
+    /// Example: "config_loader.region(aws_config::Region::new({value}.to_string()))"
+    #[serde(default)]
+    pub setter_snippet: Option<String>,
+    /// Type conversion expression for JSON value extraction
+    /// Example: "as_str().map(|s| s.to_string())"
+    #[serde(default)]
+    pub value_extractor: Option<String>,
+}
+
+/// Configuration code generation patterns for a provider
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigCodegen {
+    /// Code to initialize the config loader/builder
+    /// Example (AWS): "aws_config::from_env()"
+    /// Example (GCP): "ClientConfig::default()"
+    pub init_snippet: String,
+
+    /// Code to finalize and load the config
+    /// Example (AWS): "config_loader.load().await"
+    /// Example (K8s): "Config::from_kubeconfig(&kubeconfig_data).await"
+    pub load_snippet: String,
+
+    /// Code to create client from config
+    /// Uses {config} placeholder for the loaded config variable
+    /// Example (AWS): "{client_type}::new(&{config})"
+    /// Example (K8s): "Client::try_from({config})"
+    pub client_from_config: String,
+
+    /// Variable name for the config loader/builder
+    /// Example: "config_loader" or "config_builder"
+    pub config_var_name: String,
+
+    /// Variable name for the loaded config
+    /// Example: "sdk_config" or "config"
+    pub loaded_config_var_name: String,
 }
 
 impl Provider {
@@ -88,13 +127,24 @@ impl Provider {
                         name: "region".to_string(),
                         description: "AWS region to use".to_string(),
                         required: false,
+                        setter_snippet: Some("config_loader = config_loader.region(aws_config::Region::new({value}.to_string()))".to_string()),
+                        value_extractor: Some("as_str()".to_string()),
                     },
                     ProviderConfigAttr {
                         name: "profile".to_string(),
                         description: "AWS profile to use".to_string(),
                         required: false,
+                        setter_snippet: Some("config_loader = config_loader.profile_name({value})".to_string()),
+                        value_extractor: Some("as_str()".to_string()),
                     },
                 ],
+                config_codegen: ConfigCodegen {
+                    init_snippet: "aws_config::from_env()".to_string(),
+                    load_snippet: "config_loader.load().await".to_string(),
+                    client_from_config: "{client_type}::new(&sdk_config)".to_string(),
+                    config_var_name: "config_loader".to_string(),
+                    loaded_config_var_name: "sdk_config".to_string(),
+                },
             },
             Provider::Gcp => ProviderSdkConfig {
                 sdk_crate_pattern: "google-cloud-{service}".to_string(),
@@ -107,13 +157,24 @@ impl Provider {
                         name: "project".to_string(),
                         description: "GCP project ID".to_string(),
                         required: false,
+                        setter_snippet: Some("config_builder = config_builder.with_project_id({value}.to_string())".to_string()),
+                        value_extractor: Some("as_str()".to_string()),
                     },
                     ProviderConfigAttr {
                         name: "location".to_string(),
                         description: "GCP location/region".to_string(),
                         required: false,
+                        setter_snippet: Some("// GCP location typically set per-request, not in config".to_string()),
+                        value_extractor: Some("as_str()".to_string()),
                     },
                 ],
+                config_codegen: ConfigCodegen {
+                    init_snippet: "ClientConfig::default()".to_string(),
+                    load_snippet: "config_builder".to_string(),
+                    client_from_config: "{client_type}::new(config).await.map_err(|e| tonic::Status::internal(format!(\"Failed to create GCP client: {}\", e)))?".to_string(),
+                    config_var_name: "config_builder".to_string(),
+                    loaded_config_var_name: "config".to_string(),
+                },
             },
             Provider::Azure => ProviderSdkConfig {
                 sdk_crate_pattern: "azure_sdk_{service}".to_string(),
@@ -126,13 +187,24 @@ impl Provider {
                         name: "subscription_id".to_string(),
                         description: "Azure subscription ID".to_string(),
                         required: false,
+                        setter_snippet: Some("subscription_id = Some({value}.to_string())".to_string()),
+                        value_extractor: Some("as_str()".to_string()),
                     },
                     ProviderConfigAttr {
                         name: "tenant_id".to_string(),
                         description: "Azure tenant ID".to_string(),
                         required: false,
+                        setter_snippet: Some("tenant_id = Some({value}.to_string())".to_string()),
+                        value_extractor: Some("as_str()".to_string()),
                     },
                 ],
+                config_codegen: ConfigCodegen {
+                    init_snippet: "azure_identity::DefaultAzureCredential::default()".to_string(),
+                    load_snippet: "credentials".to_string(),
+                    client_from_config: "{client_type}::new(Arc::new(credentials))".to_string(),
+                    config_var_name: "credentials".to_string(),
+                    loaded_config_var_name: "credentials".to_string(),
+                },
             },
             Provider::Kubernetes => ProviderSdkConfig {
                 sdk_crate_pattern: "kube".to_string(),
@@ -145,13 +217,24 @@ impl Provider {
                         name: "kubeconfig".to_string(),
                         description: "Path to kubeconfig file".to_string(),
                         required: false,
+                        setter_snippet: Some("kubeconfig_path = Some({value}.to_string())".to_string()),
+                        value_extractor: Some("as_str()".to_string()),
                     },
                     ProviderConfigAttr {
                         name: "context".to_string(),
                         description: "Kubernetes context to use".to_string(),
                         required: false,
+                        setter_snippet: Some("context_name = Some({value}.to_string())".to_string()),
+                        value_extractor: Some("as_str()".to_string()),
                     },
                 ],
+                config_codegen: ConfigCodegen {
+                    init_snippet: "kube::Config::infer().await.map_err(|e| tonic::Status::internal(format!(\"Failed to load kubeconfig: {}\", e)))?".to_string(),
+                    load_snippet: "kube_config".to_string(),
+                    client_from_config: "kube::Client::try_from(kube_config).map_err(|e| tonic::Status::internal(format!(\"Failed to create Kubernetes client: {}\", e)))?".to_string(),
+                    config_var_name: "kube_config".to_string(),
+                    loaded_config_var_name: "kube_config".to_string(),
+                },
             },
         }
     }
