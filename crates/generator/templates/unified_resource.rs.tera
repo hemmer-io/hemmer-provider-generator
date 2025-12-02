@@ -98,6 +98,28 @@ pub async fn create(
 {% endif %}
 {% endfor %}
 
+    // Set nested blocks
+{% for block in resource.blocks %}
+    // {{ block.name }} block
+    if let Some(block_data) = input.get("{{ block.name }}") {
+{% if block.nesting_mode == "NestingMode::List" %}
+        // List of {{ block.name }} blocks
+        if let Some(items) = block_data.as_array() {
+            for item in items {
+                // TODO: Build {{ block.name }} SDK structure from item JSON
+                // This requires SDK-specific knowledge of the builder pattern
+                warn!("Nested block {{ block.name }} detected but SDK builder not yet implemented");
+            }
+        }
+{% else %}
+        // Single {{ block.name }} block
+        // TODO: Build {{ block.name }} SDK structure from block_data JSON
+        // This requires SDK-specific knowledge of the builder pattern
+        warn!("Nested block {{ block.name }} detected but SDK builder not yet implemented");
+{% endif %}
+    }
+{% endfor %}
+
     // Execute the request
     match request.send().await {
         Ok(response) => {

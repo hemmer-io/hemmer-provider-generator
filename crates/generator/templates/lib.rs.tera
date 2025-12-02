@@ -462,6 +462,28 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
 {% endif %}
 {% endfor %}
 
+                // Set nested blocks
+{% for block in resource.blocks %}
+                // {{ block.name }} block
+                if let Some(block_data) = planned_state.get("{{ block.name }}") {
+{% if block.nesting_mode == "NestingMode::List" %}
+                    // List of {{ block.name }} blocks
+                    if let Some(items) = block_data.as_array() {
+                        for item in items {
+                            // TODO: Build {{ block.name }} SDK structure from item JSON
+                            // This requires SDK-specific knowledge of the builder pattern
+                            warn!("Nested block {{ block.name }} detected but SDK builder not yet implemented");
+                        }
+                    }
+{% else %}
+                    // Single {{ block.name }} block
+                    // TODO: Build {{ block.name }} SDK structure from block_data JSON
+                    // This requires SDK-specific knowledge of the builder pattern
+                    warn!("Nested block {{ block.name }} detected but SDK builder not yet implemented");
+{% endif %}
+                }
+{% endfor %}
+
                 // Execute the request
                 match request.send().await {
                     Ok(response) => {
@@ -563,8 +585,65 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
                 match request.send().await {
                     Ok(response) => {
                         debug!("Read response: {:?}", response);
-                        // TODO: Map response fields back to state
-                        Ok(current_state)
+
+                        // Build state from response
+                        let mut state = serde_json::Map::new();
+
+                        // Extract fields from current_state (identifiers)
+{% for field in resource.fields %}
+{% if field.required and field.immutable %}
+                        if let Some(val) = current_state.get("{{ field.name }}") {
+                            state.insert("{{ field.name }}".to_string(), val.clone());
+                        }
+{% endif %}
+{% endfor %}
+
+                        // Extract outputs from response
+{% for output_field in resource.outputs %}
+{% if output_field.response_accessor %}
+{% if output_field.field_type == "String" %}
+                        if let Some(val) = response.{{ output_field.response_accessor }}() {
+                            state.insert(
+                                "{{ output_field.name }}".to_string(),
+                                serde_json::Value::String(val.to_string()),
+                            );
+                        }
+{% elif output_field.field_type == "Integer" %}
+                        if let Some(val) = response.{{ output_field.response_accessor }}() {
+                            state.insert(
+                                "{{ output_field.name }}".to_string(),
+                                serde_json::Value::Number(serde_json::Number::from(*val)),
+                            );
+                        }
+{% elif output_field.field_type == "Boolean" %}
+                        if let Some(val) = response.{{ output_field.response_accessor }}() {
+                            state.insert(
+                                "{{ output_field.name }}".to_string(),
+                                serde_json::Value::Bool(*val),
+                            );
+                        }
+{% else %}
+                        if let Some(val) = response.{{ output_field.response_accessor }}() {
+                            state.insert(
+                                "{{ output_field.name }}".to_string(),
+                                serde_json::Value::String(format!("{:?}", val)),
+                            );
+                        }
+{% endif %}
+{% endif %}
+{% endfor %}
+
+                        // Extract nested blocks from response
+{% for block in resource.blocks %}
+                        // TODO: Extract {{ block.name }} blocks from response
+                        // This requires SDK-specific knowledge of response structure
+                        // For now, preserve from current_state if present
+                        if let Some(block_val) = current_state.get("{{ block.name }}") {
+                            state.insert("{{ block.name }}".to_string(), block_val.clone());
+                        }
+{% endfor %}
+
+                        Ok(serde_json::Value::Object(state))
                     }
                     Err(e) => {
                         warn!("Failed to read {{ resource.name }}: {:?}", e);
@@ -640,6 +719,28 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
 {% endif %}
                 }
 {% endif %}
+{% endfor %}
+
+                // Update nested blocks
+{% for block in resource.blocks %}
+                // {{ block.name }} block
+                if let Some(block_data) = planned_state.get("{{ block.name }}") {
+{% if block.nesting_mode == "NestingMode::List" %}
+                    // List of {{ block.name }} blocks
+                    if let Some(items) = block_data.as_array() {
+                        for item in items {
+                            // TODO: Build {{ block.name }} SDK structure from item JSON
+                            // This requires SDK-specific knowledge of the builder pattern
+                            warn!("Nested block {{ block.name }} update detected but SDK builder not yet implemented");
+                        }
+                    }
+{% else %}
+                    // Single {{ block.name }} block
+                    // TODO: Build {{ block.name }} SDK structure from block_data JSON
+                    // This requires SDK-specific knowledge of the builder pattern
+                    warn!("Nested block {{ block.name }} update detected but SDK builder not yet implemented");
+{% endif %}
+                }
 {% endfor %}
 
                 match request.send().await {
