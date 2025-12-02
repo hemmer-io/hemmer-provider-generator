@@ -382,6 +382,16 @@ fn try_extract_block_from_property(
                     let attributes = extract_fields_from_schema_for_block(spec, items_schema)?;
                     let nested_blocks = detect_nested_blocks_from_schema(spec, items)?;
 
+                    // Extract SDK type name from $ref if available
+                    let sdk_type_name = items_schema
+                        .ref_path
+                        .as_ref()
+                        .map(|r| extract_type_name_from_ref(r));
+
+                    // Generate accessor method name: property_name → set_property_name
+                    // For Kubernetes, the accessor is usually just the field name (not set_field_name)
+                    let sdk_accessor_method = Some(to_snake_case(prop_name));
+
                     return Ok(Some(BlockDefinition {
                         name: to_snake_case(prop_name),
                         description: schema.description.clone(),
@@ -389,9 +399,9 @@ fn try_extract_block_from_property(
                         blocks: nested_blocks,
                         nesting_mode: NestingMode::List,
                         min_items: 0,
-                        max_items: 0,              // 0 = unlimited
-                        sdk_type_name: None,       // TODO: Extract from K8s OpenAPI ref
-                        sdk_accessor_method: None, // TODO: Extract for K8s
+                        max_items: 0, // 0 = unlimited
+                        sdk_type_name,
+                        sdk_accessor_method,
                     }));
                 }
             }
@@ -408,6 +418,30 @@ fn try_extract_block_from_property(
                 let attributes = extract_fields_from_schema_for_block(spec, schema)?;
                 let nested_blocks = detect_nested_blocks_from_schema(spec, schema_or_ref)?;
 
+                // Extract SDK type name from $ref if available, or use property name
+                let sdk_type_name = schema
+                    .ref_path
+                    .as_ref()
+                    .map(|r| extract_type_name_from_ref(r))
+                    .or_else(|| {
+                        // If no ref, use the property name as the type (PascalCase)
+                        Some(
+                            prop_name
+                                .split('_')
+                                .map(|s| {
+                                    let mut c = s.chars();
+                                    match c.next() {
+                                        None => String::new(),
+                                        Some(f) => f.to_uppercase().chain(c).collect(),
+                                    }
+                                })
+                                .collect::<String>(),
+                        )
+                    });
+
+                // Generate accessor method name: property_name → property_name (for K8s)
+                let sdk_accessor_method = Some(to_snake_case(prop_name));
+
                 return Ok(Some(BlockDefinition {
                     name: to_snake_case(prop_name),
                     description: schema.description.clone(),
@@ -416,8 +450,8 @@ fn try_extract_block_from_property(
                     nesting_mode: NestingMode::Single,
                     min_items: 1,
                     max_items: 1,
-                    sdk_type_name: None, // TODO: Extract from K8s OpenAPI ref
-                    sdk_accessor_method: None, // TODO: Extract for K8s
+                    sdk_type_name,
+                    sdk_accessor_method,
                 }));
             }
         }
@@ -628,6 +662,26 @@ fn to_snake_case(s: &str) -> String {
 
     // Strip leading and trailing underscores
     result.trim_matches('_').to_string()
+}
+
+/// Extract SDK type name from OpenAPI $ref path
+/// Examples:
+///   - "#/definitions/io.k8s.api.core.v1.Container" -> "Container"
+///   - "#/definitions/io.k8s.api.core.v1.ContainerPort" -> "ContainerPort"
+///   - "ContainerPort" -> "ContainerPort" (if no ref, use as-is)
+fn extract_type_name_from_ref(ref_or_name: &str) -> String {
+    // If it's a $ref path like "#/definitions/io.k8s.api.core.v1.Container"
+    if ref_or_name.contains('#') || ref_or_name.contains('/') {
+        ref_or_name
+            .split('/')
+            .last()
+            .and_then(|s| s.split('.').last())
+            .unwrap_or(ref_or_name)
+            .to_string()
+    } else {
+        // Already a simple type name
+        ref_or_name.to_string()
+    }
 }
 
 #[cfg(test)]

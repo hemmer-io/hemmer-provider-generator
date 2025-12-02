@@ -341,6 +341,13 @@ fn try_extract_block_from_property(
                     let attributes = extract_fields_from_schema_for_block(doc, items)?;
                     let nested_blocks = detect_nested_blocks_from_schema(doc, items)?;
 
+                    // Extract SDK type name from schema
+                    let sdk_type_name = Some(extract_type_name_from_schema(items, prop_name));
+
+                    // Generate accessor method name: property_name → set_property_name
+                    // For GCP, accessor is usually set_property_name
+                    let sdk_accessor_method = Some(format!("set_{}", to_snake_case(prop_name)));
+
                     return Ok(Some(BlockDefinition {
                         name: to_snake_case(prop_name),
                         description: resolved_schema.description.clone(),
@@ -348,9 +355,9 @@ fn try_extract_block_from_property(
                         blocks: nested_blocks,
                         nesting_mode: NestingMode::List,
                         min_items: 0,
-                        max_items: 0,              // 0 = unlimited
-                        sdk_type_name: None,       // TODO: Extract from GCP Discovery schema
-                        sdk_accessor_method: None, // TODO: Extract for GCP
+                        max_items: 0, // 0 = unlimited
+                        sdk_type_name,
+                        sdk_accessor_method,
                     }));
                 }
             }
@@ -369,6 +376,12 @@ fn try_extract_block_from_property(
                 let attributes = extract_fields_from_schema_for_block(doc, resolved_schema)?;
                 let nested_blocks = detect_nested_blocks_from_schema(doc, resolved_schema)?;
 
+                // Extract SDK type name from schema
+                let sdk_type_name = Some(extract_type_name_from_schema(resolved_schema, prop_name));
+
+                // Generate accessor method name: property_name → set_property_name
+                let sdk_accessor_method = Some(format!("set_{}", to_snake_case(prop_name)));
+
                 return Ok(Some(BlockDefinition {
                     name: to_snake_case(prop_name),
                     description: resolved_schema.description.clone(),
@@ -377,8 +390,8 @@ fn try_extract_block_from_property(
                     nesting_mode: NestingMode::Single,
                     min_items: 1,
                     max_items: 1,
-                    sdk_type_name: None, // TODO: Extract from GCP Discovery schema
-                    sdk_accessor_method: None, // TODO: Extract for GCP
+                    sdk_type_name,
+                    sdk_accessor_method,
                 }));
             }
         }
@@ -579,6 +592,29 @@ fn to_snake_case(s: &str) -> String {
 
     // Strip leading and trailing underscores
     result.trim_matches('_').to_string()
+}
+
+/// Extract SDK type name from GCP Discovery $ref or property name
+/// Examples:
+///   - Property name "accessConfigs" -> "AccessConfigs" (PascalCase)
+///   - If schema has id like "Instance" -> "Instance"
+fn extract_type_name_from_schema(schema: &Schema, prop_name: &str) -> String {
+    // If schema has an id field, use that
+    if let Some(ref id) = schema.id {
+        return id.clone();
+    }
+
+    // Otherwise convert property name to PascalCase
+    prop_name
+        .split('_')
+        .map(|s| {
+            let mut c = s.chars();
+            match c.next() {
+                None => String::new(),
+                Some(f) => f.to_uppercase().chain(c).collect(),
+            }
+        })
+        .collect::<String>()
 }
 
 #[cfg(test)]
