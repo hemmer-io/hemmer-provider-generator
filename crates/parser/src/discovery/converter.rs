@@ -2,8 +2,8 @@
 
 use super::types::{DiscoveryDoc, Method, Schema};
 use hemmer_provider_generator_common::{
-    FieldDefinition, FieldType, OperationMapping, Operations, Provider, ResourceDefinition, Result,
-    ServiceDefinition,
+    BlockDefinition, FieldDefinition, FieldType, NestingMode, OperationMapping, Operations,
+    Provider, ResourceDefinition, Result, ServiceDefinition,
 };
 use std::collections::HashMap;
 
@@ -152,6 +152,13 @@ fn build_resource_from_methods(
         Vec::new()
     };
 
+    // Detect nested blocks from create/update method
+    let blocks = if let Some(ref create_method) = methods.create.as_ref().or(methods.update.as_ref()) {
+        extract_blocks_from_method(doc, create_method)?
+    } else {
+        Vec::new()
+    };
+
     // Get description
     let description = methods
         .create
@@ -164,8 +171,7 @@ fn build_resource_from_methods(
         description,
         fields,
         outputs,
-        // Nested blocks will be detected in future parser enhancements
-        blocks: vec![],
+        blocks,
         id_field: None, // Will implement ID detection later
         operations: Operations {
             create: methods.create.map(|m| OperationMapping {
@@ -264,6 +270,227 @@ fn extract_fields_from_schema(doc: &DiscoveryDoc, schema: &Schema) -> Result<Vec
     }
 
     Ok(fields)
+}
+
+/// Extract nested blocks from method request
+fn extract_blocks_from_method(doc: &DiscoveryDoc, method: &Method) -> Result<Vec<BlockDefinition>> {
+    let mut blocks = Vec::new();
+
+    if let Some(ref request) = method.request {
+        if let Some(schema) = doc.resolve_schema_ref(&request.ref_schema) {
+            blocks = detect_nested_blocks_from_schema(doc, schema)?;
+        }
+    }
+
+    Ok(blocks)
+}
+
+/// Detect nested blocks from schema properties
+fn detect_nested_blocks_from_schema(
+    doc: &DiscoveryDoc,
+    schema: &Schema,
+) -> Result<Vec<BlockDefinition>> {
+    let mut blocks = Vec::new();
+
+    // Check each property for potential blocks
+    for (prop_name, prop_schema) in &schema.properties {
+        if let Some(block) = try_extract_block_from_property(doc, prop_name, prop_schema)? {
+            blocks.push(block);
+        }
+    }
+
+    Ok(blocks)
+}
+
+/// Try to extract a BlockDefinition from a schema property
+fn try_extract_block_from_property(
+    doc: &DiscoveryDoc,
+    prop_name: &str,
+    schema: &Schema,
+) -> Result<Option<BlockDefinition>> {
+    // Resolve reference if needed
+    let resolved_schema = if let Some(ref ref_name) = schema.ref_schema {
+        if let Some(s) = doc.resolve_schema_ref(ref_name) {
+            s
+        } else {
+            return Ok(None);
+        }
+    } else {
+        schema
+    };
+
+    match resolved_schema.schema_type.as_deref() {
+        // Array of objects → List block
+        Some("array") => {
+            if let Some(ref items_schema) = resolved_schema.items {
+                // Resolve item schema if it's a reference
+                let items = if let Some(ref ref_name) = items_schema.ref_schema {
+                    if let Some(s) = doc.resolve_schema_ref(ref_name) {
+                        s
+                    } else {
+                        return Ok(None);
+                    }
+                } else {
+                    items_schema.as_ref()
+                };
+
+                // Check if items are objects (not primitive types)
+                if items.schema_type.as_deref() == Some("object") || items.ref_schema.is_some() {
+                    // This is an array of objects - perfect for a block!
+                    let attributes = extract_fields_from_schema_for_block(doc, items)?;
+                    let nested_blocks = detect_nested_blocks_from_schema(doc, items)?;
+
+                    return Ok(Some(BlockDefinition {
+                        name: to_snake_case(prop_name),
+                        description: resolved_schema.description.clone(),
+                        attributes,
+                        blocks: nested_blocks,
+                        nesting_mode: NestingMode::List,
+                        min_items: 0,
+                        max_items: 0, // 0 = unlimited
+                    }));
+                }
+            }
+        }
+        // Single object → Single block
+        Some("object") => {
+            // Skip if this is a simple map (has additional_properties but no properties)
+            if resolved_schema.additional_properties.is_some() && resolved_schema.properties.is_empty() {
+                return Ok(None);
+            }
+
+            // Only treat as block if it's complex enough (3+ properties or has nested structures)
+            if is_complex_schema(doc, resolved_schema) {
+                let attributes = extract_fields_from_schema_for_block(doc, resolved_schema)?;
+                let nested_blocks = detect_nested_blocks_from_schema(doc, resolved_schema)?;
+
+                return Ok(Some(BlockDefinition {
+                    name: to_snake_case(prop_name),
+                    description: resolved_schema.description.clone(),
+                    attributes,
+                    blocks: nested_blocks,
+                    nesting_mode: NestingMode::Single,
+                    min_items: 1,
+                    max_items: 1,
+                }));
+            }
+        }
+        _ => {}
+    }
+
+    Ok(None)
+}
+
+/// Check if a schema is complex enough to be a block
+fn is_complex_schema(doc: &DiscoveryDoc, schema: &Schema) -> bool {
+    if schema.properties.len() >= 3 {
+        return true;
+    }
+
+    // Check if any property is itself an object or array
+    for prop_schema in schema.properties.values() {
+        let resolved = if let Some(ref ref_name) = prop_schema.ref_schema {
+            if let Some(s) = doc.resolve_schema_ref(ref_name) {
+                s
+            } else {
+                continue;
+            }
+        } else {
+            prop_schema
+        };
+
+        match resolved.schema_type.as_deref() {
+            Some("object") | Some("array") => return true,
+            _ => {}
+        }
+    }
+
+    false
+}
+
+/// Extract fields from schema for block attributes (skip nested structures)
+fn extract_fields_from_schema_for_block(
+    doc: &DiscoveryDoc,
+    schema: &Schema,
+) -> Result<Vec<FieldDefinition>> {
+    let mut fields = Vec::new();
+
+    for (field_name, field_schema) in &schema.properties {
+        // Resolve reference if needed
+        let resolved = if let Some(ref ref_name) = field_schema.ref_schema {
+            if let Some(s) = doc.resolve_schema_ref(ref_name) {
+                s
+            } else {
+                continue;
+            }
+        } else {
+            field_schema
+        };
+
+        // Skip complex nested structures (those will be blocks)
+        if is_potential_block_property(doc, resolved) {
+            continue;
+        }
+
+        let field_type = convert_schema_to_field_type(doc, resolved)?;
+        let accessor_name = to_snake_case(field_name);
+
+        fields.push(FieldDefinition {
+            name: accessor_name,
+            field_type,
+            required: false, // Discovery format doesn't have clear required markers in the same way
+            sensitive: false,
+            immutable: false,
+            description: resolved.description.clone(),
+            response_accessor: None,
+        });
+    }
+
+    Ok(fields)
+}
+
+/// Check if a property should be treated as a block rather than a field
+fn is_potential_block_property(doc: &DiscoveryDoc, schema: &Schema) -> bool {
+    // Resolve reference if needed
+    let resolved = if let Some(ref ref_name) = schema.ref_schema {
+        if let Some(s) = doc.resolve_schema_ref(ref_name) {
+            s
+        } else {
+            return false;
+        }
+    } else {
+        schema
+    };
+
+    match resolved.schema_type.as_deref() {
+        // Array of objects
+        Some("array") => {
+            if let Some(ref items) = resolved.items {
+                let items_resolved = if let Some(ref ref_name) = items.ref_schema {
+                    if let Some(s) = doc.resolve_schema_ref(ref_name) {
+                        s
+                    } else {
+                        return false;
+                    }
+                } else {
+                    items.as_ref()
+                };
+                items_resolved.schema_type.as_deref() == Some("object")
+                    || items_resolved.ref_schema.is_some()
+            } else {
+                false
+            }
+        }
+        // Complex objects (not simple maps)
+        Some("object") => {
+            if resolved.additional_properties.is_some() && resolved.properties.is_empty() {
+                false // This is a map
+            } else {
+                is_complex_schema(doc, resolved)
+            }
+        }
+        _ => false,
+    }
 }
 
 /// Convert Discovery schema to FieldType
