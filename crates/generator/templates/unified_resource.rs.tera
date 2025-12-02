@@ -103,7 +103,7 @@ pub async fn create(
     // {{ block.name }} block
     if let Some(block_data) = input.get("{{ block.name }}") {
 {% if block.sdk_type_name and block.sdk_accessor_method %}
-{% if block.nesting_mode == "NestingMode::List" %}
+{% if block.nesting_mode == "List" %}
         // List of {{ block.name }} blocks
         if let Some(items) = block_data.as_array() {
             let mut block_items = Vec::new();
@@ -338,7 +338,7 @@ pub async fn read(
 {% if block.sdk_accessor_method %}
                 // Extract {{ block.name }} block
                 if let Some(block_data) = response.{{ block.sdk_accessor_method }}() {
-{% if block.nesting_mode == "NestingMode::List" %}
+{% if block.nesting_mode == "List" %}
                     // List of {{ block.name }} blocks
                     let block_array: Vec<serde_json::Value> = block_data
                         .iter()
@@ -479,7 +479,7 @@ pub async fn update(
     // {{ block.name }} block
     if let Some(block_data) = input.get("{{ block.name }}") {
 {% if block.sdk_type_name and block.sdk_accessor_method %}
-{% if block.nesting_mode == "NestingMode::List" %}
+{% if block.nesting_mode == "List" %}
         // List of {{ block.name }} blocks
         if let Some(items) = block_data.as_array() {
             let mut block_items = Vec::new();

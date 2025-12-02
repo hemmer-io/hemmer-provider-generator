@@ -88,7 +88,36 @@ fn test_generate_s3_provider() {
                         response_accessor: None,
                     },
                 ],
-                blocks: vec![], // Nested blocks would go here (e.g., transition, expiration)
+                blocks: vec![BlockDefinition {
+                    name: "transition".to_string(),
+                    description: Some("Transition actions".to_string()),
+                    attributes: vec![
+                        FieldDefinition {
+                            name: "days".to_string(),
+                            field_type: FieldType::Integer,
+                            required: false,
+                            sensitive: false,
+                            immutable: false,
+                            description: Some("Days until transition".to_string()),
+                            response_accessor: None,
+                        },
+                        FieldDefinition {
+                            name: "storage_class".to_string(),
+                            field_type: FieldType::String,
+                            required: true,
+                            sensitive: false,
+                            immutable: false,
+                            description: Some("Target storage class".to_string()),
+                            response_accessor: None,
+                        },
+                    ],
+                    blocks: vec![], // Could nest even further
+                    nesting_mode: NestingMode::List,
+                    min_items: 0,
+                    max_items: 0,
+                    sdk_type_name: Some("Transition".to_string()),
+                    sdk_accessor_method: Some("set_transitions".to_string()),
+                }],
                 nesting_mode: NestingMode::List,
                 min_items: 0,
                 max_items: 0, // 0 = unlimited
@@ -122,10 +151,18 @@ fn test_generate_s3_provider() {
     let temp_dir = TempDir::new().unwrap();
     let output_path = temp_dir.path();
 
-    let generator = ProviderGenerator::new(service_def).unwrap();
-    let result = generator.generate_to_directory(output_path);
+    // Also generate to a permanent location for inspection
+    let permanent_dir = std::path::PathBuf::from("/tmp/test-recursive-blocks");
+    let _ = std::fs::remove_dir_all(&permanent_dir);
+    std::fs::create_dir_all(&permanent_dir).unwrap();
 
+    let generator = ProviderGenerator::new(service_def.clone()).unwrap();
+    let result = generator.generate_to_directory(output_path);
     assert!(result.is_ok(), "Generation failed: {:?}", result);
+
+    // Also generate to permanent directory for inspection
+    let generator2 = ProviderGenerator::new(service_def).unwrap();
+    let _ = generator2.generate_to_directory(&permanent_dir);
 
     // Check that files were created
     assert!(
