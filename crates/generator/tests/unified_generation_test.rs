@@ -142,6 +142,8 @@ fn test_generate_unified_aws_provider() {
                 nesting_mode: NestingMode::List,
                 min_items: 0,
                 max_items: 20, // DynamoDB limit
+                sdk_type_name: Some("GlobalSecondaryIndex".to_string()),
+                sdk_accessor_method: Some("set_global_secondary_indexes".to_string()),
             }],
             id_field: None, // Will implement ID detection later
             operations: Operations {

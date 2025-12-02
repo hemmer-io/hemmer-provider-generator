@@ -462,6 +462,252 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
 {% endif %}
 {% endfor %}
 
+                // Set nested blocks
+{% for block in resource.blocks %}
+                // {{ block.name }} block
+                if let Some(block_data) = planned_state.get("{{ block.name }}") {
+{% if block.sdk_type_name and block.sdk_accessor_method %}
+{% if block.nesting_mode == "List" %}
+                    // List of {{ block.name }} blocks
+                    if let Some(items) = block_data.as_array() {
+                        let mut block_items = Vec::new();
+                        for item in items {
+                            // Build {{ block.sdk_type_name }} from JSON
+                            let mut builder = {{ provider | sdk_crate_module(service_name=service_name) }}::types::{{ block.sdk_type_name }}::builder();
+
+{% for attr in block.attributes %}
+                            if let Some(val) = item.get("{{ attr.name }}") {
+{% if attr.field_type == "String" %}
+                                if let Some(s) = val.as_str() {
+                                    builder = builder.{{ attr.name }}(s);
+                                }
+{% elif attr.field_type == "Integer" %}
+                                if let Some(n) = val.as_i64() {
+                                    builder = builder.{{ attr.name }}(n as i32);
+                                }
+{% elif attr.field_type == "Boolean" %}
+                                if let Some(b) = val.as_bool() {
+                                    builder = builder.{{ attr.name }}(b);
+                                }
+{% elif attr.field_type == "Float" %}
+                                if let Some(f) = val.as_f64() {
+                                    builder = builder.{{ attr.name }}(f);
+                                }
+{% else %}
+                                if let Some(s) = val.as_str() {
+                                    builder = builder.{{ attr.name }}(s);
+                                }
+{% endif %}
+                            }
+{% endfor %}
+
+                            // Handle nested blocks within {{ block.name }}
+{% for nested_block in block.blocks %}
+{% if nested_block.sdk_type_name and nested_block.sdk_accessor_method %}
+                            if let Some(nested_data) = item.get("{{ nested_block.name }}") {
+{% if nested_block.nesting_mode == "List" %}
+                                // List of {{ nested_block.name }} blocks
+                                if let Some(nested_items) = nested_data.as_array() {
+                                    let mut nested_block_items = Vec::new();
+                                    for nested_item in nested_items {
+                                        let mut nested_builder = {{ provider | sdk_crate_module(service_name=service_name) }}::types::{{ nested_block.sdk_type_name }}::builder();
+{% for nested_attr in nested_block.attributes %}
+                                        if let Some(val) = nested_item.get("{{ nested_attr.name }}") {
+{% if nested_attr.field_type == "String" %}
+                                            if let Some(s) = val.as_str() {
+                                                nested_builder = nested_builder.{{ nested_attr.name }}(s);
+                                            }
+{% elif nested_attr.field_type == "Integer" %}
+                                            if let Some(n) = val.as_i64() {
+                                                nested_builder = nested_builder.{{ nested_attr.name }}(n as i32);
+                                            }
+{% elif nested_attr.field_type == "Boolean" %}
+                                            if let Some(b) = val.as_bool() {
+                                                nested_builder = nested_builder.{{ nested_attr.name }}(b);
+                                            }
+{% elif nested_attr.field_type == "Float" %}
+                                            if let Some(f) = val.as_f64() {
+                                                nested_builder = nested_builder.{{ nested_attr.name }}(f);
+                                            }
+{% else %}
+                                            if let Some(s) = val.as_str() {
+                                                nested_builder = nested_builder.{{ nested_attr.name }}(s);
+                                            }
+{% endif %}
+                                        }
+{% endfor %}
+                                        if let Ok(built) = nested_builder.build() {
+                                            nested_block_items.push(built);
+                                        }
+                                    }
+                                    if !nested_block_items.is_empty() {
+                                        builder = builder.{{ nested_block.sdk_accessor_method }}(nested_block_items);
+                                    }
+                                }
+{% else %}
+                                // Single {{ nested_block.name }} block
+                                let mut nested_builder = {{ provider | sdk_crate_module(service_name=service_name) }}::types::{{ nested_block.sdk_type_name }}::builder();
+{% for nested_attr in nested_block.attributes %}
+                                if let Some(val) = nested_data.get("{{ nested_attr.name }}") {
+{% if nested_attr.field_type == "String" %}
+                                    if let Some(s) = val.as_str() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(s);
+                                    }
+{% elif nested_attr.field_type == "Integer" %}
+                                    if let Some(n) = val.as_i64() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(n as i32);
+                                    }
+{% elif nested_attr.field_type == "Boolean" %}
+                                    if let Some(b) = val.as_bool() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(b);
+                                    }
+{% elif nested_attr.field_type == "Float" %}
+                                    if let Some(f) = val.as_f64() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(f);
+                                    }
+{% else %}
+                                    if let Some(s) = val.as_str() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(s);
+                                    }
+{% endif %}
+                                }
+{% endfor %}
+                                if let Ok(built) = nested_builder.build() {
+                                    builder = builder.{{ nested_block.sdk_accessor_method }}(built);
+                                }
+{% endif %}
+                            }
+{% endif %}
+{% endfor %}
+
+                            if let Ok(built) = builder.build() {
+                                block_items.push(built);
+                            }
+                        }
+                        if !block_items.is_empty() {
+                            request = request.{{ block.sdk_accessor_method }}(block_items);
+                        }
+                    }
+{% else %}
+                    // Single {{ block.name }} block
+                    let mut builder = {{ provider | sdk_crate_module(service_name=service_name) }}::types::{{ block.sdk_type_name }}::builder();
+
+{% for attr in block.attributes %}
+                    if let Some(val) = block_data.get("{{ attr.name }}") {
+{% if attr.field_type == "String" %}
+                        if let Some(s) = val.as_str() {
+                            builder = builder.{{ attr.name }}(s);
+                        }
+{% elif attr.field_type == "Integer" %}
+                        if let Some(n) = val.as_i64() {
+                            builder = builder.{{ attr.name }}(n as i32);
+                        }
+{% elif attr.field_type == "Boolean" %}
+                        if let Some(b) = val.as_bool() {
+                            builder = builder.{{ attr.name }}(b);
+                        }
+{% elif attr.field_type == "Float" %}
+                        if let Some(f) = val.as_f64() {
+                            builder = builder.{{ attr.name }}(f);
+                        }
+{% else %}
+                        if let Some(s) = val.as_str() {
+                            builder = builder.{{ attr.name }}(s);
+                        }
+{% endif %}
+                    }
+{% endfor %}
+
+                    // Handle nested blocks within {{ block.name }}
+{% for nested_block in block.blocks %}
+{% if nested_block.sdk_type_name and nested_block.sdk_accessor_method %}
+                    if let Some(nested_data) = block_data.get("{{ nested_block.name }}") {
+{% if nested_block.nesting_mode == "List" %}
+                        // List of {{ nested_block.name }} blocks
+                        if let Some(nested_items) = nested_data.as_array() {
+                            let mut nested_block_items = Vec::new();
+                            for nested_item in nested_items {
+                                let mut nested_builder = {{ provider | sdk_crate_module(service_name=service_name) }}::types::{{ nested_block.sdk_type_name }}::builder();
+{% for nested_attr in nested_block.attributes %}
+                                if let Some(val) = nested_item.get("{{ nested_attr.name }}") {
+{% if nested_attr.field_type == "String" %}
+                                    if let Some(s) = val.as_str() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(s);
+                                    }
+{% elif nested_attr.field_type == "Integer" %}
+                                    if let Some(n) = val.as_i64() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(n as i32);
+                                    }
+{% elif nested_attr.field_type == "Boolean" %}
+                                    if let Some(b) = val.as_bool() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(b);
+                                    }
+{% elif nested_attr.field_type == "Float" %}
+                                    if let Some(f) = val.as_f64() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(f);
+                                    }
+{% else %}
+                                    if let Some(s) = val.as_str() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(s);
+                                    }
+{% endif %}
+                                }
+{% endfor %}
+                                if let Ok(built) = nested_builder.build() {
+                                    nested_block_items.push(built);
+                                }
+                            }
+                            if !nested_block_items.is_empty() {
+                                builder = builder.{{ nested_block.sdk_accessor_method }}(nested_block_items);
+                            }
+                        }
+{% else %}
+                        // Single {{ nested_block.name }} block
+                        let mut nested_builder = {{ provider | sdk_crate_module(service_name=service_name) }}::types::{{ nested_block.sdk_type_name }}::builder();
+{% for nested_attr in nested_block.attributes %}
+                        if let Some(val) = nested_data.get("{{ nested_attr.name }}") {
+{% if nested_attr.field_type == "String" %}
+                            if let Some(s) = val.as_str() {
+                                nested_builder = nested_builder.{{ nested_attr.name }}(s);
+                            }
+{% elif nested_attr.field_type == "Integer" %}
+                            if let Some(n) = val.as_i64() {
+                                nested_builder = nested_builder.{{ nested_attr.name }}(n as i32);
+                            }
+{% elif nested_attr.field_type == "Boolean" %}
+                            if let Some(b) = val.as_bool() {
+                                nested_builder = nested_builder.{{ nested_attr.name }}(b);
+                            }
+{% elif nested_attr.field_type == "Float" %}
+                            if let Some(f) = val.as_f64() {
+                                nested_builder = nested_builder.{{ nested_attr.name }}(f);
+                            }
+{% else %}
+                            if let Some(s) = val.as_str() {
+                                nested_builder = nested_builder.{{ nested_attr.name }}(s);
+                            }
+{% endif %}
+                        }
+{% endfor %}
+                        if let Ok(built) = nested_builder.build() {
+                            builder = builder.{{ nested_block.sdk_accessor_method }}(built);
+                        }
+{% endif %}
+                    }
+{% endif %}
+{% endfor %}
+
+                    if let Ok(built) = builder.build() {
+                        request = request.{{ block.sdk_accessor_method }}(built);
+                    }
+{% endif %}
+{% else %}
+                    // SDK metadata not available for {{ block.name }} - skipping
+                    warn!("Nested block {{ block.name }} detected but SDK metadata not available");
+{% endif %}
+                }
+{% endfor %}
+
                 // Execute the request
                 match request.send().await {
                     Ok(response) => {
@@ -563,8 +809,278 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
                 match request.send().await {
                     Ok(response) => {
                         debug!("Read response: {:?}", response);
-                        // TODO: Map response fields back to state
-                        Ok(current_state)
+
+                        // Build state from response
+                        let mut state = serde_json::Map::new();
+
+                        // Extract fields from current_state (identifiers)
+{% for field in resource.fields %}
+{% if field.required and field.immutable %}
+                        if let Some(val) = current_state.get("{{ field.name }}") {
+                            state.insert("{{ field.name }}".to_string(), val.clone());
+                        }
+{% endif %}
+{% endfor %}
+
+                        // Extract outputs from response
+{% for output_field in resource.outputs %}
+{% if output_field.response_accessor %}
+{% if output_field.field_type == "String" %}
+                        if let Some(val) = response.{{ output_field.response_accessor }}() {
+                            state.insert(
+                                "{{ output_field.name }}".to_string(),
+                                serde_json::Value::String(val.to_string()),
+                            );
+                        }
+{% elif output_field.field_type == "Integer" %}
+                        if let Some(val) = response.{{ output_field.response_accessor }}() {
+                            state.insert(
+                                "{{ output_field.name }}".to_string(),
+                                serde_json::Value::Number(serde_json::Number::from(*val)),
+                            );
+                        }
+{% elif output_field.field_type == "Boolean" %}
+                        if let Some(val) = response.{{ output_field.response_accessor }}() {
+                            state.insert(
+                                "{{ output_field.name }}".to_string(),
+                                serde_json::Value::Bool(*val),
+                            );
+                        }
+{% else %}
+                        if let Some(val) = response.{{ output_field.response_accessor }}() {
+                            state.insert(
+                                "{{ output_field.name }}".to_string(),
+                                serde_json::Value::String(format!("{:?}", val)),
+                            );
+                        }
+{% endif %}
+{% endif %}
+{% endfor %}
+
+                        // Extract nested blocks from response
+{% for block in resource.blocks %}
+{% if block.sdk_accessor_method %}
+                        // Extract {{ block.name }} block
+                        if let Some(block_data) = response.{{ block.sdk_accessor_method }}() {
+{% if block.nesting_mode == "List" %}
+                            // List of {{ block.name }} blocks
+                            let block_array: Vec<serde_json::Value> = block_data
+                                .iter()
+                                .map(|item| {
+                                    let mut block_obj = serde_json::Map::new();
+{% for attr in block.attributes %}
+{% if attr.field_type == "String" %}
+                                    if let Some(val) = item.{{ attr.name }}() {
+                                        block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::String(val.to_string()));
+                                    }
+{% elif attr.field_type == "Integer" %}
+                                    if let Some(val) = item.{{ attr.name }}() {
+                                        block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::Number(serde_json::Number::from(*val)));
+                                    }
+{% elif attr.field_type == "Boolean" %}
+                                    if let Some(val) = item.{{ attr.name }}() {
+                                        block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::Bool(*val));
+                                    }
+{% elif attr.field_type == "Float" %}
+                                    if let Some(val) = item.{{ attr.name }}() {
+                                        if let Some(num) = serde_json::Number::from_f64(*val) {
+                                            block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::Number(num));
+                                        }
+                                    }
+{% else %}
+                                    if let Some(val) = item.{{ attr.name }}() {
+                                        block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::String(format!("{:?}", val)));
+                                    }
+{% endif %}
+{% endfor %}
+                                    // Extract nested blocks within {{ block.name }}
+{% for nested_block in block.blocks %}
+{% if nested_block.sdk_accessor_method %}
+                                    if let Some(nested_block_data) = item.{{ nested_block.sdk_accessor_method }}() {
+{% if nested_block.nesting_mode == "List" %}
+                                        // List of {{ nested_block.name }} blocks
+                                        let nested_array: Vec<serde_json::Value> = nested_block_data
+                                            .iter()
+                                            .map(|nested_item| {
+                                                let mut nested_obj = serde_json::Map::new();
+{% for nested_attr in nested_block.attributes %}
+{% if nested_attr.field_type == "String" %}
+                                                if let Some(val) = nested_item.{{ nested_attr.name }}() {
+                                                    nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::String(val.to_string()));
+                                                }
+{% elif nested_attr.field_type == "Integer" %}
+                                                if let Some(val) = nested_item.{{ nested_attr.name }}() {
+                                                    nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::Number(serde_json::Number::from(*val)));
+                                                }
+{% elif nested_attr.field_type == "Boolean" %}
+                                                if let Some(val) = nested_item.{{ nested_attr.name }}() {
+                                                    nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::Bool(*val));
+                                                }
+{% elif nested_attr.field_type == "Float" %}
+                                                if let Some(val) = nested_item.{{ nested_attr.name }}() {
+                                                    if let Some(num) = serde_json::Number::from_f64(*val) {
+                                                        nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::Number(num));
+                                                    }
+                                                }
+{% else %}
+                                                if let Some(val) = nested_item.{{ nested_attr.name }}() {
+                                                    nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::String(format!("{:?}", val)));
+                                                }
+{% endif %}
+{% endfor %}
+                                                serde_json::Value::Object(nested_obj)
+                                            })
+                                            .collect();
+                                        block_obj.insert("{{ nested_block.name }}".to_string(), serde_json::Value::Array(nested_array));
+{% else %}
+                                        // Single {{ nested_block.name }} block
+                                        let mut nested_obj = serde_json::Map::new();
+{% for nested_attr in nested_block.attributes %}
+{% if nested_attr.field_type == "String" %}
+                                        if let Some(val) = nested_block_data.{{ nested_attr.name }}() {
+                                            nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::String(val.to_string()));
+                                        }
+{% elif nested_attr.field_type == "Integer" %}
+                                        if let Some(val) = nested_block_data.{{ nested_attr.name }}() {
+                                            nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::Number(serde_json::Number::from(*val)));
+                                        }
+{% elif nested_attr.field_type == "Boolean" %}
+                                        if let Some(val) = nested_block_data.{{ nested_attr.name }}() {
+                                            nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::Bool(*val));
+                                        }
+{% elif nested_attr.field_type == "Float" %}
+                                        if let Some(val) = nested_block_data.{{ nested_attr.name }}() {
+                                            if let Some(num) = serde_json::Number::from_f64(*val) {
+                                                nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::Number(num));
+                                            }
+                                        }
+{% else %}
+                                        if let Some(val) = nested_block_data.{{ nested_attr.name }}() {
+                                            nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::String(format!("{:?}", val)));
+                                        }
+{% endif %}
+{% endfor %}
+                                        block_obj.insert("{{ nested_block.name }}".to_string(), serde_json::Value::Object(nested_obj));
+{% endif %}
+                                    }
+{% endif %}
+{% endfor %}
+                                    serde_json::Value::Object(block_obj)
+                                })
+                                .collect();
+                            state.insert("{{ block.name }}".to_string(), serde_json::Value::Array(block_array));
+{% else %}
+                            // Single {{ block.name }} block
+                            let mut block_obj = serde_json::Map::new();
+{% for attr in block.attributes %}
+{% if attr.field_type == "String" %}
+                            if let Some(val) = block_data.{{ attr.name }}() {
+                                block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::String(val.to_string()));
+                            }
+{% elif attr.field_type == "Integer" %}
+                            if let Some(val) = block_data.{{ attr.name }}() {
+                                block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::Number(serde_json::Number::from(*val)));
+                            }
+{% elif attr.field_type == "Boolean" %}
+                            if let Some(val) = block_data.{{ attr.name }}() {
+                                block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::Bool(*val));
+                            }
+{% elif attr.field_type == "Float" %}
+                            if let Some(val) = block_data.{{ attr.name }}() {
+                                if let Some(num) = serde_json::Number::from_f64(*val) {
+                                    block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::Number(num));
+                                }
+                            }
+{% else %}
+                            if let Some(val) = block_data.{{ attr.name }}() {
+                                block_obj.insert("{{ attr.name }}".to_string(), serde_json::Value::String(format!("{:?}", val)));
+                            }
+{% endif %}
+{% endfor %}
+                            // Extract nested blocks within {{ block.name }}
+{% for nested_block in block.blocks %}
+{% if nested_block.sdk_accessor_method %}
+                            if let Some(nested_block_data) = block_data.{{ nested_block.sdk_accessor_method }}() {
+{% if nested_block.nesting_mode == "List" %}
+                                // List of {{ nested_block.name }} blocks
+                                let nested_array: Vec<serde_json::Value> = nested_block_data
+                                    .iter()
+                                    .map(|nested_item| {
+                                        let mut nested_obj = serde_json::Map::new();
+{% for nested_attr in nested_block.attributes %}
+{% if nested_attr.field_type == "String" %}
+                                        if let Some(val) = nested_item.{{ nested_attr.name }}() {
+                                            nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::String(val.to_string()));
+                                        }
+{% elif nested_attr.field_type == "Integer" %}
+                                        if let Some(val) = nested_item.{{ nested_attr.name }}() {
+                                            nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::Number(serde_json::Number::from(*val)));
+                                        }
+{% elif nested_attr.field_type == "Boolean" %}
+                                        if let Some(val) = nested_item.{{ nested_attr.name }}() {
+                                            nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::Bool(*val));
+                                        }
+{% elif nested_attr.field_type == "Float" %}
+                                        if let Some(val) = nested_item.{{ nested_attr.name }}() {
+                                            if let Some(num) = serde_json::Number::from_f64(*val) {
+                                                nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::Number(num));
+                                            }
+                                        }
+{% else %}
+                                        if let Some(val) = nested_item.{{ nested_attr.name }}() {
+                                            nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::String(format!("{:?}", val)));
+                                        }
+{% endif %}
+{% endfor %}
+                                        serde_json::Value::Object(nested_obj)
+                                    })
+                                    .collect();
+                                block_obj.insert("{{ nested_block.name }}".to_string(), serde_json::Value::Array(nested_array));
+{% else %}
+                                // Single {{ nested_block.name }} block
+                                let mut nested_obj = serde_json::Map::new();
+{% for nested_attr in nested_block.attributes %}
+{% if nested_attr.field_type == "String" %}
+                                if let Some(val) = nested_block_data.{{ nested_attr.name }}() {
+                                    nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::String(val.to_string()));
+                                }
+{% elif nested_attr.field_type == "Integer" %}
+                                if let Some(val) = nested_block_data.{{ nested_attr.name }}() {
+                                    nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::Number(serde_json::Number::from(*val)));
+                                }
+{% elif nested_attr.field_type == "Boolean" %}
+                                if let Some(val) = nested_block_data.{{ nested_attr.name }}() {
+                                    nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::Bool(*val));
+                                }
+{% elif nested_attr.field_type == "Float" %}
+                                if let Some(val) = nested_block_data.{{ nested_attr.name }}() {
+                                    if let Some(num) = serde_json::Number::from_f64(*val) {
+                                        nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::Number(num));
+                                    }
+                                }
+{% else %}
+                                if let Some(val) = nested_block_data.{{ nested_attr.name }}() {
+                                    nested_obj.insert("{{ nested_attr.name }}".to_string(), serde_json::Value::String(format!("{:?}", val)));
+                                }
+{% endif %}
+{% endfor %}
+                                block_obj.insert("{{ nested_block.name }}".to_string(), serde_json::Value::Object(nested_obj));
+{% endif %}
+                            }
+{% endif %}
+{% endfor %}
+                            state.insert("{{ block.name }}".to_string(), serde_json::Value::Object(block_obj));
+{% endif %}
+                        }
+{% else %}
+                        // SDK metadata not available - preserve from current_state if present
+                        if let Some(block_val) = current_state.get("{{ block.name }}") {
+                            state.insert("{{ block.name }}".to_string(), block_val.clone());
+                        }
+{% endif %}
+{% endfor %}
+
+                        Ok(serde_json::Value::Object(state))
                     }
                     Err(e) => {
                         warn!("Failed to read {{ resource.name }}: {:?}", e);
@@ -640,6 +1156,252 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
 {% endif %}
                 }
 {% endif %}
+{% endfor %}
+
+                // Update nested blocks
+{% for block in resource.blocks %}
+                // {{ block.name }} block
+                if let Some(block_data) = planned_state.get("{{ block.name }}") {
+{% if block.sdk_type_name and block.sdk_accessor_method %}
+{% if block.nesting_mode == "List" %}
+                    // List of {{ block.name }} blocks
+                    if let Some(items) = block_data.as_array() {
+                        let mut block_items = Vec::new();
+                        for item in items {
+                            // Build {{ block.sdk_type_name }} from JSON
+                            let mut builder = {{ provider | sdk_crate_module(service_name=service_name) }}::types::{{ block.sdk_type_name }}::builder();
+
+{% for attr in block.attributes %}
+                            if let Some(val) = item.get("{{ attr.name }}") {
+{% if attr.field_type == "String" %}
+                                if let Some(s) = val.as_str() {
+                                    builder = builder.{{ attr.name }}(s);
+                                }
+{% elif attr.field_type == "Integer" %}
+                                if let Some(n) = val.as_i64() {
+                                    builder = builder.{{ attr.name }}(n as i32);
+                                }
+{% elif attr.field_type == "Boolean" %}
+                                if let Some(b) = val.as_bool() {
+                                    builder = builder.{{ attr.name }}(b);
+                                }
+{% elif attr.field_type == "Float" %}
+                                if let Some(f) = val.as_f64() {
+                                    builder = builder.{{ attr.name }}(f);
+                                }
+{% else %}
+                                if let Some(s) = val.as_str() {
+                                    builder = builder.{{ attr.name }}(s);
+                                }
+{% endif %}
+                            }
+{% endfor %}
+
+                            // Handle nested blocks within {{ block.name }}
+{% for nested_block in block.blocks %}
+{% if nested_block.sdk_type_name and nested_block.sdk_accessor_method %}
+                            if let Some(nested_data) = item.get("{{ nested_block.name }}") {
+{% if nested_block.nesting_mode == "List" %}
+                                // List of {{ nested_block.name }} blocks
+                                if let Some(nested_items) = nested_data.as_array() {
+                                    let mut nested_block_items = Vec::new();
+                                    for nested_item in nested_items {
+                                        let mut nested_builder = {{ provider | sdk_crate_module(service_name=service_name) }}::types::{{ nested_block.sdk_type_name }}::builder();
+{% for nested_attr in nested_block.attributes %}
+                                        if let Some(val) = nested_item.get("{{ nested_attr.name }}") {
+{% if nested_attr.field_type == "String" %}
+                                            if let Some(s) = val.as_str() {
+                                                nested_builder = nested_builder.{{ nested_attr.name }}(s);
+                                            }
+{% elif nested_attr.field_type == "Integer" %}
+                                            if let Some(n) = val.as_i64() {
+                                                nested_builder = nested_builder.{{ nested_attr.name }}(n as i32);
+                                            }
+{% elif nested_attr.field_type == "Boolean" %}
+                                            if let Some(b) = val.as_bool() {
+                                                nested_builder = nested_builder.{{ nested_attr.name }}(b);
+                                            }
+{% elif nested_attr.field_type == "Float" %}
+                                            if let Some(f) = val.as_f64() {
+                                                nested_builder = nested_builder.{{ nested_attr.name }}(f);
+                                            }
+{% else %}
+                                            if let Some(s) = val.as_str() {
+                                                nested_builder = nested_builder.{{ nested_attr.name }}(s);
+                                            }
+{% endif %}
+                                        }
+{% endfor %}
+                                        if let Ok(built) = nested_builder.build() {
+                                            nested_block_items.push(built);
+                                        }
+                                    }
+                                    if !nested_block_items.is_empty() {
+                                        builder = builder.{{ nested_block.sdk_accessor_method }}(nested_block_items);
+                                    }
+                                }
+{% else %}
+                                // Single {{ nested_block.name }} block
+                                let mut nested_builder = {{ provider | sdk_crate_module(service_name=service_name) }}::types::{{ nested_block.sdk_type_name }}::builder();
+{% for nested_attr in nested_block.attributes %}
+                                if let Some(val) = nested_data.get("{{ nested_attr.name }}") {
+{% if nested_attr.field_type == "String" %}
+                                    if let Some(s) = val.as_str() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(s);
+                                    }
+{% elif nested_attr.field_type == "Integer" %}
+                                    if let Some(n) = val.as_i64() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(n as i32);
+                                    }
+{% elif nested_attr.field_type == "Boolean" %}
+                                    if let Some(b) = val.as_bool() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(b);
+                                    }
+{% elif nested_attr.field_type == "Float" %}
+                                    if let Some(f) = val.as_f64() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(f);
+                                    }
+{% else %}
+                                    if let Some(s) = val.as_str() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(s);
+                                    }
+{% endif %}
+                                }
+{% endfor %}
+                                if let Ok(built) = nested_builder.build() {
+                                    builder = builder.{{ nested_block.sdk_accessor_method }}(built);
+                                }
+{% endif %}
+                            }
+{% endif %}
+{% endfor %}
+
+                            if let Ok(built) = builder.build() {
+                                block_items.push(built);
+                            }
+                        }
+                        if !block_items.is_empty() {
+                            request = request.{{ block.sdk_accessor_method }}(block_items);
+                        }
+                    }
+{% else %}
+                    // Single {{ block.name }} block
+                    let mut builder = {{ provider | sdk_crate_module(service_name=service_name) }}::types::{{ block.sdk_type_name }}::builder();
+
+{% for attr in block.attributes %}
+                    if let Some(val) = block_data.get("{{ attr.name }}") {
+{% if attr.field_type == "String" %}
+                        if let Some(s) = val.as_str() {
+                            builder = builder.{{ attr.name }}(s);
+                        }
+{% elif attr.field_type == "Integer" %}
+                        if let Some(n) = val.as_i64() {
+                            builder = builder.{{ attr.name }}(n as i32);
+                        }
+{% elif attr.field_type == "Boolean" %}
+                        if let Some(b) = val.as_bool() {
+                            builder = builder.{{ attr.name }}(b);
+                        }
+{% elif attr.field_type == "Float" %}
+                        if let Some(f) = val.as_f64() {
+                            builder = builder.{{ attr.name }}(f);
+                        }
+{% else %}
+                        if let Some(s) = val.as_str() {
+                            builder = builder.{{ attr.name }}(s);
+                        }
+{% endif %}
+                    }
+{% endfor %}
+
+                    // Handle nested blocks within {{ block.name }}
+{% for nested_block in block.blocks %}
+{% if nested_block.sdk_type_name and nested_block.sdk_accessor_method %}
+                    if let Some(nested_data) = block_data.get("{{ nested_block.name }}") {
+{% if nested_block.nesting_mode == "List" %}
+                        // List of {{ nested_block.name }} blocks
+                        if let Some(nested_items) = nested_data.as_array() {
+                            let mut nested_block_items = Vec::new();
+                            for nested_item in nested_items {
+                                let mut nested_builder = {{ provider | sdk_crate_module(service_name=service_name) }}::types::{{ nested_block.sdk_type_name }}::builder();
+{% for nested_attr in nested_block.attributes %}
+                                if let Some(val) = nested_item.get("{{ nested_attr.name }}") {
+{% if nested_attr.field_type == "String" %}
+                                    if let Some(s) = val.as_str() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(s);
+                                    }
+{% elif nested_attr.field_type == "Integer" %}
+                                    if let Some(n) = val.as_i64() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(n as i32);
+                                    }
+{% elif nested_attr.field_type == "Boolean" %}
+                                    if let Some(b) = val.as_bool() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(b);
+                                    }
+{% elif nested_attr.field_type == "Float" %}
+                                    if let Some(f) = val.as_f64() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(f);
+                                    }
+{% else %}
+                                    if let Some(s) = val.as_str() {
+                                        nested_builder = nested_builder.{{ nested_attr.name }}(s);
+                                    }
+{% endif %}
+                                }
+{% endfor %}
+                                if let Ok(built) = nested_builder.build() {
+                                    nested_block_items.push(built);
+                                }
+                            }
+                            if !nested_block_items.is_empty() {
+                                builder = builder.{{ nested_block.sdk_accessor_method }}(nested_block_items);
+                            }
+                        }
+{% else %}
+                        // Single {{ nested_block.name }} block
+                        let mut nested_builder = {{ provider | sdk_crate_module(service_name=service_name) }}::types::{{ nested_block.sdk_type_name }}::builder();
+{% for nested_attr in nested_block.attributes %}
+                        if let Some(val) = nested_data.get("{{ nested_attr.name }}") {
+{% if nested_attr.field_type == "String" %}
+                            if let Some(s) = val.as_str() {
+                                nested_builder = nested_builder.{{ nested_attr.name }}(s);
+                            }
+{% elif nested_attr.field_type == "Integer" %}
+                            if let Some(n) = val.as_i64() {
+                                nested_builder = nested_builder.{{ nested_attr.name }}(n as i32);
+                            }
+{% elif nested_attr.field_type == "Boolean" %}
+                            if let Some(b) = val.as_bool() {
+                                nested_builder = nested_builder.{{ nested_attr.name }}(b);
+                            }
+{% elif nested_attr.field_type == "Float" %}
+                            if let Some(f) = val.as_f64() {
+                                nested_builder = nested_builder.{{ nested_attr.name }}(f);
+                            }
+{% else %}
+                            if let Some(s) = val.as_str() {
+                                nested_builder = nested_builder.{{ nested_attr.name }}(s);
+                            }
+{% endif %}
+                        }
+{% endfor %}
+                        if let Ok(built) = nested_builder.build() {
+                            builder = builder.{{ nested_block.sdk_accessor_method }}(built);
+                        }
+{% endif %}
+                    }
+{% endif %}
+{% endfor %}
+
+                    if let Ok(built) = builder.build() {
+                        request = request.{{ block.sdk_accessor_method }}(built);
+                    }
+{% endif %}
+{% else %}
+                    // SDK metadata not available for {{ block.name }} - skipping
+                    warn!("Nested block {{ block.name }} detected but SDK metadata not available");
+{% endif %}
+                }
 {% endfor %}
 
                 match request.send().await {

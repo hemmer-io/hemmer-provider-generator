@@ -3,8 +3,8 @@
 use super::parser::ProviderHint;
 use super::types::{OpenApiSpec, Operation, Schema, SchemaOrRef};
 use hemmer_provider_generator_common::{
-    FieldDefinition, FieldType, OperationMapping, Operations, Provider, ResourceDefinition, Result,
-    ServiceDefinition,
+    BlockDefinition, FieldDefinition, FieldType, NestingMode, OperationMapping, Operations,
+    Provider, ResourceDefinition, Result, ServiceDefinition,
 };
 use std::collections::HashMap;
 
@@ -130,6 +130,13 @@ fn build_resource_from_operations(
         Vec::new()
     };
 
+    // Detect nested blocks from create/update operation
+    let blocks = if let Some(create_op) = ops.create.as_ref().or(ops.update.as_ref()) {
+        extract_blocks_from_operation(spec, create_op)?
+    } else {
+        Vec::new()
+    };
+
     // Get description
     let description = ops
         .create
@@ -142,8 +149,7 @@ fn build_resource_from_operations(
         description,
         fields,
         outputs,
-        // Nested blocks will be detected in future parser enhancements
-        blocks: vec![],
+        blocks,
         id_field: None, // Will implement ID detection later
         operations: Operations {
             create: ops.create.and_then(|op| {
@@ -289,6 +295,276 @@ fn extract_fields_from_schema(
     Ok(fields)
 }
 
+/// Extract nested blocks from operation request body
+fn extract_blocks_from_operation(
+    spec: &OpenApiSpec,
+    operation: &Operation,
+) -> Result<Vec<BlockDefinition>> {
+    let mut blocks = Vec::new();
+
+    if let Some(ref request_body) = operation.request_body {
+        // Get the schema from the first content type (usually application/json)
+        if let Some(media_type) = request_body.content.values().next() {
+            if let Some(ref schema_or_ref) = media_type.schema {
+                blocks = detect_nested_blocks_from_schema(spec, schema_or_ref)?;
+            }
+        }
+    }
+
+    Ok(blocks)
+}
+
+/// Detect nested blocks from schema properties
+fn detect_nested_blocks_from_schema(
+    spec: &OpenApiSpec,
+    schema_or_ref: &SchemaOrRef,
+) -> Result<Vec<BlockDefinition>> {
+    let mut blocks = Vec::new();
+
+    let schema = match schema_or_ref {
+        SchemaOrRef::Schema(s) => s.as_ref(),
+        SchemaOrRef::Reference { ref_path } => {
+            if let Some(s) = spec.resolve_schema_ref(ref_path) {
+                s
+            } else {
+                return Ok(blocks);
+            }
+        }
+    };
+
+    // Check each property for potential blocks
+    for (prop_name, prop_schema_or_ref) in &schema.properties {
+        if let Some(block) = try_extract_block_from_property(spec, prop_name, prop_schema_or_ref)? {
+            blocks.push(block);
+        }
+    }
+
+    Ok(blocks)
+}
+
+/// Try to extract a BlockDefinition from a schema property
+fn try_extract_block_from_property(
+    spec: &OpenApiSpec,
+    prop_name: &str,
+    schema_or_ref: &SchemaOrRef,
+) -> Result<Option<BlockDefinition>> {
+    let schema = match schema_or_ref {
+        SchemaOrRef::Schema(s) => s.as_ref(),
+        SchemaOrRef::Reference { ref_path } => {
+            if let Some(s) = spec.resolve_schema_ref(ref_path) {
+                s
+            } else {
+                return Ok(None);
+            }
+        }
+    };
+
+    match schema.schema_type.as_deref() {
+        // Array of objects → List block
+        Some("array") => {
+            if let Some(ref items) = schema.items {
+                let items_schema = match items.as_ref() {
+                    SchemaOrRef::Schema(s) => s.as_ref(),
+                    SchemaOrRef::Reference { ref_path } => {
+                        if let Some(s) = spec.resolve_schema_ref(ref_path) {
+                            s
+                        } else {
+                            return Ok(None);
+                        }
+                    }
+                };
+
+                // Check if items are objects (not primitive types)
+                if items_schema.schema_type.as_deref() == Some("object")
+                    || items_schema.ref_path.is_some()
+                {
+                    // This is an array of objects - perfect for a block!
+                    let attributes = extract_fields_from_schema_for_block(spec, items_schema)?;
+                    let nested_blocks = detect_nested_blocks_from_schema(spec, items)?;
+
+                    // Extract SDK type name from $ref if available
+                    let sdk_type_name = items_schema
+                        .ref_path
+                        .as_ref()
+                        .map(|r| extract_type_name_from_ref(r));
+
+                    // Generate accessor method name: property_name → set_property_name
+                    // For Kubernetes, the accessor is usually just the field name (not set_field_name)
+                    let sdk_accessor_method = Some(to_snake_case(prop_name));
+
+                    return Ok(Some(BlockDefinition {
+                        name: to_snake_case(prop_name),
+                        description: schema.description.clone(),
+                        attributes,
+                        blocks: nested_blocks,
+                        nesting_mode: NestingMode::List,
+                        min_items: 0,
+                        max_items: 0, // 0 = unlimited
+                        sdk_type_name,
+                        sdk_accessor_method,
+                    }));
+                }
+            }
+        }
+        // Single object → Single block
+        Some("object") => {
+            // Skip if this is a simple map (has additional_properties but no properties)
+            if schema.additional_properties.is_some() && schema.properties.is_empty() {
+                return Ok(None);
+            }
+
+            // Only treat as block if it's complex enough (3+ properties or has nested structures)
+            if is_complex_schema(spec, schema) {
+                let attributes = extract_fields_from_schema_for_block(spec, schema)?;
+                let nested_blocks = detect_nested_blocks_from_schema(spec, schema_or_ref)?;
+
+                // Extract SDK type name from $ref if available, or use property name
+                let sdk_type_name = schema
+                    .ref_path
+                    .as_ref()
+                    .map(|r| extract_type_name_from_ref(r))
+                    .or_else(|| {
+                        // If no ref, use the property name as the type (PascalCase)
+                        Some(
+                            prop_name
+                                .split('_')
+                                .map(|s| {
+                                    let mut c = s.chars();
+                                    match c.next() {
+                                        None => String::new(),
+                                        Some(f) => f.to_uppercase().chain(c).collect(),
+                                    }
+                                })
+                                .collect::<String>(),
+                        )
+                    });
+
+                // Generate accessor method name: property_name → property_name (for K8s)
+                let sdk_accessor_method = Some(to_snake_case(prop_name));
+
+                return Ok(Some(BlockDefinition {
+                    name: to_snake_case(prop_name),
+                    description: schema.description.clone(),
+                    attributes,
+                    blocks: nested_blocks,
+                    nesting_mode: NestingMode::Single,
+                    min_items: 1,
+                    max_items: 1,
+                    sdk_type_name,
+                    sdk_accessor_method,
+                }));
+            }
+        }
+        _ => {}
+    }
+
+    Ok(None)
+}
+
+/// Check if a schema is complex enough to be a block
+fn is_complex_schema(spec: &OpenApiSpec, schema: &Schema) -> bool {
+    if schema.properties.len() >= 3 {
+        return true;
+    }
+
+    // Check if any property is itself an object or array
+    for prop_schema_or_ref in schema.properties.values() {
+        let prop_schema = match prop_schema_or_ref {
+            SchemaOrRef::Schema(s) => s.as_ref(),
+            SchemaOrRef::Reference { ref_path } => {
+                if let Some(s) = spec.resolve_schema_ref(ref_path) {
+                    s
+                } else {
+                    continue;
+                }
+            }
+        };
+
+        match prop_schema.schema_type.as_deref() {
+            Some("object") | Some("array") => return true,
+            _ => {}
+        }
+    }
+
+    false
+}
+
+/// Extract fields from schema for block attributes (skip nested structures)
+fn extract_fields_from_schema_for_block(
+    spec: &OpenApiSpec,
+    schema: &Schema,
+) -> Result<Vec<FieldDefinition>> {
+    let mut fields = Vec::new();
+
+    for (field_name, field_schema_or_ref) in &schema.properties {
+        let field_schema = match field_schema_or_ref {
+            SchemaOrRef::Schema(s) => s.as_ref(),
+            SchemaOrRef::Reference { ref_path } => {
+                if let Some(s) = spec.resolve_schema_ref(ref_path) {
+                    s
+                } else {
+                    continue;
+                }
+            }
+        };
+
+        // Skip complex nested structures (those will be blocks)
+        if is_potential_block_property(spec, field_schema) {
+            continue;
+        }
+
+        let field_type = convert_schema_to_field_type(spec, field_schema)?;
+        let required = schema.required.contains(field_name);
+        let accessor_name = to_snake_case(field_name);
+
+        fields.push(FieldDefinition {
+            name: accessor_name,
+            field_type,
+            required,
+            sensitive: false,
+            immutable: false,
+            description: field_schema.description.clone(),
+            response_accessor: None,
+        });
+    }
+
+    Ok(fields)
+}
+
+/// Check if a property should be treated as a block rather than a field
+fn is_potential_block_property(spec: &OpenApiSpec, schema: &Schema) -> bool {
+    match schema.schema_type.as_deref() {
+        // Array of objects
+        Some("array") => {
+            if let Some(ref items) = schema.items {
+                let items_schema = match items.as_ref() {
+                    SchemaOrRef::Schema(s) => s.as_ref(),
+                    SchemaOrRef::Reference { ref_path } => {
+                        if let Some(s) = spec.resolve_schema_ref(ref_path) {
+                            s
+                        } else {
+                            return false;
+                        }
+                    }
+                };
+                items_schema.schema_type.as_deref() == Some("object")
+                    || items_schema.ref_path.is_some()
+            } else {
+                false
+            }
+        }
+        // Complex objects (not simple maps)
+        Some("object") => {
+            if schema.additional_properties.is_some() && schema.properties.is_empty() {
+                false // This is a map
+            } else {
+                is_complex_schema(spec, schema)
+            }
+        }
+        _ => false,
+    }
+}
+
 /// Convert OpenAPI schema to FieldType
 fn convert_schema_to_field_type(spec: &OpenApiSpec, schema: &Schema) -> Result<FieldType> {
     // Handle reference
@@ -386,6 +662,26 @@ fn to_snake_case(s: &str) -> String {
 
     // Strip leading and trailing underscores
     result.trim_matches('_').to_string()
+}
+
+/// Extract SDK type name from OpenAPI $ref path
+/// Examples:
+///   - "#/definitions/io.k8s.api.core.v1.Container" -> "Container"
+///   - "#/definitions/io.k8s.api.core.v1.ContainerPort" -> "ContainerPort"
+///   - "ContainerPort" -> "ContainerPort" (if no ref, use as-is)
+fn extract_type_name_from_ref(ref_or_name: &str) -> String {
+    // If it's a $ref path like "#/definitions/io.k8s.api.core.v1.Container"
+    if ref_or_name.contains('#') || ref_or_name.contains('/') {
+        ref_or_name
+            .split('/')
+            .next_back()
+            .and_then(|s| s.split('.').next_back())
+            .unwrap_or(ref_or_name)
+            .to_string()
+    } else {
+        // Already a simple type name
+        ref_or_name.to_string()
+    }
 }
 
 #[cfg(test)]

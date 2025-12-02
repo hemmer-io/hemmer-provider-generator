@@ -2,8 +2,8 @@
 
 use super::types::{Shape, SmithyModel};
 use hemmer_provider_generator_common::{
-    FieldDefinition, FieldType, GeneratorError, OperationMapping, Operations, Provider,
-    ResourceDefinition, Result, ServiceDefinition,
+    BlockDefinition, FieldDefinition, FieldType, GeneratorError, NestingMode, OperationMapping,
+    Operations, Provider, ResourceDefinition, Result, ServiceDefinition,
 };
 use std::collections::HashMap;
 
@@ -156,13 +156,19 @@ fn build_resource_from_operations(
         Vec::new()
     };
 
+    // Detect nested blocks from create/update operation inputs
+    let blocks = if let Some(op) = create_op.as_ref().or(update_op.as_ref()) {
+        extract_blocks_from_operation(model, op)?
+    } else {
+        Vec::new()
+    };
+
     Ok(Some(ResourceDefinition {
         name: to_snake_case(resource_name),
         description: Some(format!("{} resource", resource_name)),
         fields,
         outputs,
-        // Nested blocks will be detected in future parser enhancements
-        blocks: vec![],
+        blocks,
         id_field: None, // Will implement ID detection later
         operations: Operations {
             create: create_op.map(|op| OperationMapping {
@@ -225,6 +231,28 @@ fn extract_fields_from_operation(
     Ok(fields)
 }
 
+/// Extract nested blocks from operation input
+fn extract_blocks_from_operation(
+    model: &SmithyModel,
+    op_name: &str,
+) -> Result<Vec<BlockDefinition>> {
+    // Find operation shape
+    let op_shape = find_shape_by_name(model, op_name);
+
+    if let Some(Shape::Operation {
+        input: Some(input_ref),
+        ..
+    }) = op_shape
+    {
+        // Get input structure
+        if let Some(input_shape) = model.get_shape(&input_ref.target) {
+            return detect_nested_blocks_from_structure(model, input_shape);
+        }
+    }
+
+    Ok(Vec::new())
+}
+
 /// Extract outputs from operation output
 fn extract_outputs_from_operation(
     model: &SmithyModel,
@@ -263,6 +291,185 @@ fn extract_outputs_from_operation(
     }
 
     Ok(outputs)
+}
+
+/// Detect nested blocks from structure members
+/// A member is considered a block if it's a List or Structure that contains complex data
+fn detect_nested_blocks_from_structure(
+    model: &SmithyModel,
+    structure_shape: &Shape,
+) -> Result<Vec<BlockDefinition>> {
+    let mut blocks = Vec::new();
+
+    if let Shape::Structure { members, .. } = structure_shape {
+        for (member_name, member) in members {
+            if let Some(block) = try_extract_block_from_member(model, member_name, member)? {
+                blocks.push(block);
+            }
+        }
+    }
+
+    Ok(blocks)
+}
+
+/// Try to extract a BlockDefinition from a structure member
+fn try_extract_block_from_member(
+    model: &SmithyModel,
+    member_name: &str,
+    member: &super::types::Member,
+) -> Result<Option<BlockDefinition>> {
+    let target_shape = model.get_shape(&member.target);
+
+    match target_shape {
+        // List of structures → List block
+        Some(Shape::List {
+            member: list_member,
+            ..
+        }) => {
+            if let Some(item_shape) = model.get_shape(&list_member.target) {
+                if let Shape::Structure {
+                    members: item_members,
+                    ..
+                } = item_shape
+                {
+                    // This is a list of structures - perfect for a block!
+                    let attributes = extract_fields_from_structure_members(model, item_members)?;
+                    let nested_blocks = detect_nested_blocks_from_structure(model, item_shape)?;
+
+                    // Extract SDK type name from the shape target
+                    let sdk_type_name = extract_type_name_from_shape_id(&list_member.target);
+
+                    // Generate accessor method name: member_name → set_member_name
+                    let sdk_accessor_method = format!("set_{}", to_snake_case(member_name));
+
+                    return Ok(Some(BlockDefinition {
+                        name: to_snake_case(member_name),
+                        description: extract_documentation(&member.traits),
+                        attributes,
+                        blocks: nested_blocks,
+                        nesting_mode: NestingMode::List,
+                        min_items: 0,
+                        max_items: 0, // 0 = unlimited
+                        sdk_type_name: Some(sdk_type_name),
+                        sdk_accessor_method: Some(sdk_accessor_method),
+                    }));
+                }
+            }
+        }
+        // Single structure → Single block
+        Some(Shape::Structure {
+            members: nested_members,
+            ..
+        }) => {
+            // Skip if this looks like a simple wrapper (only 1-2 primitive fields)
+            if is_complex_structure(model, nested_members) {
+                let attributes = extract_fields_from_structure_members(model, nested_members)?;
+                let nested_blocks =
+                    detect_nested_blocks_from_structure(model, target_shape.unwrap())?;
+
+                // Extract SDK type name from the member target
+                let sdk_type_name = extract_type_name_from_shape_id(&member.target);
+
+                // Generate accessor method name: member_name → set_member_name
+                let sdk_accessor_method = format!("set_{}", to_snake_case(member_name));
+
+                return Ok(Some(BlockDefinition {
+                    name: to_snake_case(member_name),
+                    description: extract_documentation(&member.traits),
+                    attributes,
+                    blocks: nested_blocks,
+                    nesting_mode: NestingMode::Single,
+                    min_items: 1,
+                    max_items: 1,
+                    sdk_type_name: Some(sdk_type_name),
+                    sdk_accessor_method: Some(sdk_accessor_method),
+                }));
+            }
+        }
+        _ => {}
+    }
+
+    Ok(None)
+}
+
+/// Check if a structure is complex enough to be a block
+/// Returns true if it has 3+ members or contains nested structures
+fn is_complex_structure(
+    model: &SmithyModel,
+    members: &HashMap<String, super::types::Member>,
+) -> bool {
+    if members.len() >= 3 {
+        return true;
+    }
+
+    // Check if any member is itself a structure or list
+    for member in members.values() {
+        if let Some(Shape::Structure { .. } | Shape::List { .. } | Shape::Map { .. }) =
+            model.get_shape(&member.target)
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Extract fields from structure members (helper for block attributes)
+fn extract_fields_from_structure_members(
+    model: &SmithyModel,
+    members: &HashMap<String, super::types::Member>,
+) -> Result<Vec<FieldDefinition>> {
+    let mut fields = Vec::new();
+
+    for (field_name, member) in members {
+        // Only extract primitive fields as attributes (skip nested structures - those become blocks)
+        let field_type = convert_smithy_type_to_field_type(model, &member.target)?;
+
+        // Skip if this would be a nested block (we handle those separately)
+        if is_potential_block_member(model, member) {
+            continue;
+        }
+
+        let required = member.traits.contains_key(super::types::traits::REQUIRED);
+        let sensitive = member.traits.contains_key(super::types::traits::SENSITIVE);
+        let description = extract_documentation(&member.traits);
+
+        fields.push(FieldDefinition {
+            name: to_snake_case(field_name),
+            field_type,
+            required,
+            sensitive,
+            immutable: false,
+            description,
+            response_accessor: None,
+        });
+    }
+
+    Ok(fields)
+}
+
+/// Check if a member should be treated as a block rather than a field
+fn is_potential_block_member(model: &SmithyModel, member: &super::types::Member) -> bool {
+    if let Some(shape) = model.get_shape(&member.target) {
+        match shape {
+            // Lists of structures are blocks
+            Shape::List {
+                member: list_member,
+                ..
+            } => {
+                if let Some(item_shape) = model.get_shape(&list_member.target) {
+                    matches!(item_shape, Shape::Structure { .. })
+                } else {
+                    false
+                }
+            }
+            // Complex structures are blocks
+            Shape::Structure { members, .. } => is_complex_structure(model, members),
+            _ => false,
+        }
+    } else {
+        false
+    }
 }
 
 /// Convert Smithy type to FieldType
@@ -339,6 +546,16 @@ fn extract_documentation(traits: &HashMap<String, serde_json::Value>) -> Option<
         .get(super::types::traits::DOCUMENTATION)
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
+}
+
+/// Extract SDK type name from Smithy shape ID
+/// e.g., "com.amazonaws.s3#LifecycleRule" -> "LifecycleRule"
+fn extract_type_name_from_shape_id(shape_id: &str) -> String {
+    shape_id
+        .split('#')
+        .next_back()
+        .unwrap_or(shape_id)
+        .to_string()
 }
 
 /// Convert PascalCase to snake_case
