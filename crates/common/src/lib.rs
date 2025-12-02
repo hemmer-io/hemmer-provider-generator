@@ -239,6 +239,17 @@ pub struct BlockDefinition {
     pub min_items: u32,
     /// Maximum number of occurrences (0 for unlimited)
     pub max_items: u32,
+
+    // SDK-specific metadata for code generation
+    /// SDK type name for this block (e.g., "LifecycleRule", "Container")
+    /// Used to generate builder code: `LifecycleRule::builder()`
+    #[serde(default)]
+    pub sdk_type_name: Option<String>,
+
+    /// SDK accessor/setter method name (e.g., "set_lifecycle_rules", "containers")
+    /// Used in request builders: `request.set_lifecycle_rules(rules)`
+    #[serde(default)]
+    pub sdk_accessor_method: Option<String>,
 }
 
 /// Definition of a single resource type (e.g., S3 Bucket, EC2 Instance)

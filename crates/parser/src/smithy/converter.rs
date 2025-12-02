@@ -336,6 +336,12 @@ fn try_extract_block_from_member(
                     let attributes = extract_fields_from_structure_members(model, item_members)?;
                     let nested_blocks = detect_nested_blocks_from_structure(model, item_shape)?;
 
+                    // Extract SDK type name from the shape target
+                    let sdk_type_name = extract_type_name_from_shape_id(&list_member.target);
+
+                    // Generate accessor method name: member_name → set_member_name
+                    let sdk_accessor_method = format!("set_{}", to_snake_case(member_name));
+
                     return Ok(Some(BlockDefinition {
                         name: to_snake_case(member_name),
                         description: extract_documentation(&member.traits),
@@ -344,6 +350,8 @@ fn try_extract_block_from_member(
                         nesting_mode: NestingMode::List,
                         min_items: 0,
                         max_items: 0, // 0 = unlimited
+                        sdk_type_name: Some(sdk_type_name),
+                        sdk_accessor_method: Some(sdk_accessor_method),
                     }));
                 }
             }
@@ -359,6 +367,12 @@ fn try_extract_block_from_member(
                 let nested_blocks =
                     detect_nested_blocks_from_structure(model, target_shape.unwrap())?;
 
+                // Extract SDK type name from the member target
+                let sdk_type_name = extract_type_name_from_shape_id(&member.target);
+
+                // Generate accessor method name: member_name → set_member_name
+                let sdk_accessor_method = format!("set_{}", to_snake_case(member_name));
+
                 return Ok(Some(BlockDefinition {
                     name: to_snake_case(member_name),
                     description: extract_documentation(&member.traits),
@@ -367,6 +381,8 @@ fn try_extract_block_from_member(
                     nesting_mode: NestingMode::Single,
                     min_items: 1,
                     max_items: 1,
+                    sdk_type_name: Some(sdk_type_name),
+                    sdk_accessor_method: Some(sdk_accessor_method),
                 }));
             }
         }
@@ -531,6 +547,16 @@ fn extract_documentation(traits: &HashMap<String, serde_json::Value>) -> Option<
         .get(super::types::traits::DOCUMENTATION)
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
+}
+
+/// Extract SDK type name from Smithy shape ID
+/// e.g., "com.amazonaws.s3#LifecycleRule" -> "LifecycleRule"
+fn extract_type_name_from_shape_id(shape_id: &str) -> String {
+    shape_id
+        .split('#')
+        .next_back()
+        .unwrap_or(shape_id)
+        .to_string()
 }
 
 /// Convert PascalCase to snake_case

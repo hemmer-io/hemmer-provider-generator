@@ -92,6 +92,8 @@ fn test_generate_s3_provider() {
                 nesting_mode: NestingMode::List,
                 min_items: 0,
                 max_items: 0, // 0 = unlimited
+                sdk_type_name: Some("LifecycleRule".to_string()),
+                sdk_accessor_method: Some("set_lifecycle_rules".to_string()),
             }],
             id_field: None, // Will implement ID detection later
             operations: Operations {

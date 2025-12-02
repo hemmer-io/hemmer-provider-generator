@@ -349,6 +349,8 @@ fn try_extract_block_from_property(
                         nesting_mode: NestingMode::List,
                         min_items: 0,
                         max_items: 0, // 0 = unlimited
+                        sdk_type_name: None, // TODO: Extract from GCP Discovery schema
+                        sdk_accessor_method: None, // TODO: Extract for GCP
                     }));
                 }
             }
@@ -375,6 +377,8 @@ fn try_extract_block_from_property(
                     nesting_mode: NestingMode::Single,
                     min_items: 1,
                     max_items: 1,
+                    sdk_type_name: None, // TODO: Extract from GCP Discovery schema
+                    sdk_accessor_method: None, // TODO: Extract for GCP
                 }));
             }
         }
