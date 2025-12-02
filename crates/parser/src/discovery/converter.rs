@@ -348,8 +348,8 @@ fn try_extract_block_from_property(
                         blocks: nested_blocks,
                         nesting_mode: NestingMode::List,
                         min_items: 0,
-                        max_items: 0, // 0 = unlimited
-                        sdk_type_name: None, // TODO: Extract from GCP Discovery schema
+                        max_items: 0,              // 0 = unlimited
+                        sdk_type_name: None,       // TODO: Extract from GCP Discovery schema
                         sdk_accessor_method: None, // TODO: Extract for GCP
                     }));
                 }

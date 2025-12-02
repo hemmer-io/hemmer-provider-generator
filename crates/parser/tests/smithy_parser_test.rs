@@ -187,3 +187,203 @@ fn test_parse_simple_smithy_model() {
         bucket.operations.delete.is_some()
     );
 }
+
+#[test]
+fn test_parse_smithy_with_nested_blocks() {
+    // Smithy model with nested blocks (lifecycle rules)
+    let smithy_json = r#"{
+        "smithy": "2.0",
+        "shapes": {
+            "com.example.storage#StorageService": {
+                "type": "service",
+                "version": "2023-01-01",
+                "operations": [
+                    { "target": "com.example.storage#PutBucketLifecycle" },
+                    { "target": "com.example.storage#GetBucketLifecycle" }
+                ]
+            },
+            "com.example.storage#PutBucketLifecycle": {
+                "type": "operation",
+                "input": {
+                    "target": "com.example.storage#PutBucketLifecycleInput"
+                },
+                "output": {
+                    "target": "com.example.storage#PutBucketLifecycleOutput"
+                }
+            },
+            "com.example.storage#PutBucketLifecycleInput": {
+                "type": "structure",
+                "members": {
+                    "Bucket": {
+                        "target": "smithy.api#String",
+                        "traits": {
+                            "smithy.api#required": {}
+                        }
+                    },
+                    "LifecycleRules": {
+                        "target": "com.example.storage#LifecycleRuleList",
+                        "traits": {
+                            "smithy.api#documentation": "List of lifecycle rules"
+                        }
+                    }
+                }
+            },
+            "com.example.storage#PutBucketLifecycleOutput": {
+                "type": "structure",
+                "members": {}
+            },
+            "com.example.storage#GetBucketLifecycle": {
+                "type": "operation",
+                "input": {
+                    "target": "com.example.storage#GetBucketLifecycleInput"
+                },
+                "output": {
+                    "target": "com.example.storage#GetBucketLifecycleOutput"
+                }
+            },
+            "com.example.storage#GetBucketLifecycleInput": {
+                "type": "structure",
+                "members": {
+                    "Bucket": {
+                        "target": "smithy.api#String",
+                        "traits": {
+                            "smithy.api#required": {}
+                        }
+                    }
+                }
+            },
+            "com.example.storage#GetBucketLifecycleOutput": {
+                "type": "structure",
+                "members": {
+                    "LifecycleRules": {
+                        "target": "com.example.storage#LifecycleRuleList"
+                    }
+                }
+            },
+            "com.example.storage#LifecycleRuleList": {
+                "type": "list",
+                "member": {
+                    "target": "com.example.storage#LifecycleRule"
+                }
+            },
+            "com.example.storage#LifecycleRule": {
+                "type": "structure",
+                "members": {
+                    "Id": {
+                        "target": "smithy.api#String",
+                        "traits": {
+                            "smithy.api#required": {},
+                            "smithy.api#documentation": "Rule identifier"
+                        }
+                    },
+                    "Status": {
+                        "target": "smithy.api#String",
+                        "traits": {
+                            "smithy.api#documentation": "Rule status (Enabled or Disabled)"
+                        }
+                    },
+                    "Prefix": {
+                        "target": "smithy.api#String",
+                        "traits": {
+                            "smithy.api#documentation": "Object key prefix"
+                        }
+                    },
+                    "ExpirationDays": {
+                        "target": "smithy.api#Integer",
+                        "traits": {
+                            "smithy.api#documentation": "Days until expiration"
+                        }
+                    }
+                }
+            }
+        }
+    }"#;
+
+    // Parse the Smithy model
+    let parser = SmithyParser::from_json(smithy_json, "storage", "2023-01-01").unwrap();
+    let service_def = parser.parse().unwrap();
+
+    // Verify service metadata
+    assert_eq!(service_def.name, "storage");
+
+    // Find the bucket_lifecycle resource
+    let bucket_lifecycle = service_def
+        .resources
+        .iter()
+        .find(|r| r.name == "bucket_lifecycle")
+        .expect("Should have bucket_lifecycle resource");
+
+    // Verify the resource has blocks
+    assert!(
+        !bucket_lifecycle.blocks.is_empty(),
+        "Should have detected nested blocks"
+    );
+
+    // Find the lifecycle_rules block
+    let lifecycle_rules_block = bucket_lifecycle
+        .blocks
+        .iter()
+        .find(|b| b.name == "lifecycle_rules")
+        .expect("Should have lifecycle_rules block");
+
+    // Verify SDK metadata extraction
+    assert!(
+        lifecycle_rules_block.sdk_type_name.is_some(),
+        "Should have extracted SDK type name"
+    );
+    assert_eq!(
+        lifecycle_rules_block.sdk_type_name.as_deref(),
+        Some("LifecycleRule"),
+        "SDK type name should be LifecycleRule"
+    );
+
+    assert!(
+        lifecycle_rules_block.sdk_accessor_method.is_some(),
+        "Should have extracted SDK accessor method"
+    );
+    assert_eq!(
+        lifecycle_rules_block.sdk_accessor_method.as_deref(),
+        Some("set_lifecycle_rules"),
+        "SDK accessor method should be set_lifecycle_rules"
+    );
+
+    // Verify block attributes
+    assert!(
+        !lifecycle_rules_block.attributes.is_empty(),
+        "Block should have attributes"
+    );
+
+    // Check for specific attributes
+    let id_attr = lifecycle_rules_block
+        .attributes
+        .iter()
+        .find(|a| a.name == "id");
+    assert!(id_attr.is_some(), "Should have id attribute");
+    assert!(id_attr.unwrap().required, "id should be required");
+
+    let expiration_days_attr = lifecycle_rules_block
+        .attributes
+        .iter()
+        .find(|a| a.name == "expiration_days");
+    assert!(
+        expiration_days_attr.is_some(),
+        "Should have expiration_days attribute"
+    );
+
+    println!("✅ Successfully parsed Smithy model with nested blocks!");
+    println!("   Service: {}", service_def.name);
+    println!("   Resources: {}", service_def.resources.len());
+    println!("   Lifecycle rules block:");
+    println!(
+        "     - SDK type: {:?}",
+        lifecycle_rules_block.sdk_type_name
+    );
+    println!(
+        "     - SDK accessor: {:?}",
+        lifecycle_rules_block.sdk_accessor_method
+    );
+    println!(
+        "     - Attributes: {}",
+        lifecycle_rules_block.attributes.len()
+    );
+}
