@@ -102,20 +102,86 @@ pub async fn create(
 {% for block in resource.blocks %}
     // {{ block.name }} block
     if let Some(block_data) = input.get("{{ block.name }}") {
+{% if block.sdk_type_name and block.sdk_accessor_method %}
 {% if block.nesting_mode == "NestingMode::List" %}
         // List of {{ block.name }} blocks
         if let Some(items) = block_data.as_array() {
+            let mut block_items = Vec::new();
             for item in items {
-                // TODO: Build {{ block.name }} SDK structure from item JSON
-                // This requires SDK-specific knowledge of the builder pattern
-                warn!("Nested block {{ block.name }} detected but SDK builder not yet implemented");
+                // Build {{ block.sdk_type_name }} from JSON
+                let mut builder = {{ provider | sdk_crate_module(service_name=service_name) }}::types::{{ block.sdk_type_name }}::builder();
+
+{% for attr in block.attributes %}
+                if let Some(val) = item.get("{{ attr.name }}") {
+{% if attr.field_type == "String" %}
+                    if let Some(s) = val.as_str() {
+                        builder = builder.{{ attr.name }}(s);
+                    }
+{% elif attr.field_type == "Integer" %}
+                    if let Some(n) = val.as_i64() {
+                        builder = builder.{{ attr.name }}(n as i32);
+                    }
+{% elif attr.field_type == "Boolean" %}
+                    if let Some(b) = val.as_bool() {
+                        builder = builder.{{ attr.name }}(b);
+                    }
+{% elif attr.field_type == "Float" %}
+                    if let Some(f) = val.as_f64() {
+                        builder = builder.{{ attr.name }}(f);
+                    }
+{% else %}
+                    if let Some(s) = val.as_str() {
+                        builder = builder.{{ attr.name }}(s);
+                    }
+{% endif %}
+                }
+{% endfor %}
+
+                if let Ok(built) = builder.build() {
+                    block_items.push(built);
+                }
+            }
+            if !block_items.is_empty() {
+                request = request.{{ block.sdk_accessor_method }}(block_items);
             }
         }
 {% else %}
         // Single {{ block.name }} block
-        // TODO: Build {{ block.name }} SDK structure from block_data JSON
-        // This requires SDK-specific knowledge of the builder pattern
-        warn!("Nested block {{ block.name }} detected but SDK builder not yet implemented");
+        let mut builder = {{ provider | sdk_crate_module(service_name=service_name) }}::types::{{ block.sdk_type_name }}::builder();
+
+{% for attr in block.attributes %}
+        if let Some(val) = block_data.get("{{ attr.name }}") {
+{% if attr.field_type == "String" %}
+            if let Some(s) = val.as_str() {
+                builder = builder.{{ attr.name }}(s);
+            }
+{% elif attr.field_type == "Integer" %}
+            if let Some(n) = val.as_i64() {
+                builder = builder.{{ attr.name }}(n as i32);
+            }
+{% elif attr.field_type == "Boolean" %}
+            if let Some(b) = val.as_bool() {
+                builder = builder.{{ attr.name }}(b);
+            }
+{% elif attr.field_type == "Float" %}
+            if let Some(f) = val.as_f64() {
+                builder = builder.{{ attr.name }}(f);
+            }
+{% else %}
+            if let Some(s) = val.as_str() {
+                builder = builder.{{ attr.name }}(s);
+            }
+{% endif %}
+        }
+{% endfor %}
+
+        if let Ok(built) = builder.build() {
+            request = request.{{ block.sdk_accessor_method }}(built);
+        }
+{% endif %}
+{% else %}
+        // SDK metadata not available for {{ block.name }} - skipping
+        warn!("Nested block {{ block.name }} detected but SDK metadata not available");
 {% endif %}
     }
 {% endfor %}
@@ -332,6 +398,94 @@ pub async fn update(
 {% endif %}
     }
 {% endif %}
+{% endfor %}
+
+    // Set nested blocks
+{% for block in resource.blocks %}
+    // {{ block.name }} block
+    if let Some(block_data) = input.get("{{ block.name }}") {
+{% if block.sdk_type_name and block.sdk_accessor_method %}
+{% if block.nesting_mode == "NestingMode::List" %}
+        // List of {{ block.name }} blocks
+        if let Some(items) = block_data.as_array() {
+            let mut block_items = Vec::new();
+            for item in items {
+                // Build {{ block.sdk_type_name }} from JSON
+                let mut builder = {{ provider | sdk_crate_module(service_name=service_name) }}::types::{{ block.sdk_type_name }}::builder();
+
+{% for attr in block.attributes %}
+                if let Some(val) = item.get("{{ attr.name }}") {
+{% if attr.field_type == "String" %}
+                    if let Some(s) = val.as_str() {
+                        builder = builder.{{ attr.name }}(s);
+                    }
+{% elif attr.field_type == "Integer" %}
+                    if let Some(n) = val.as_i64() {
+                        builder = builder.{{ attr.name }}(n as i32);
+                    }
+{% elif attr.field_type == "Boolean" %}
+                    if let Some(b) = val.as_bool() {
+                        builder = builder.{{ attr.name }}(b);
+                    }
+{% elif attr.field_type == "Float" %}
+                    if let Some(f) = val.as_f64() {
+                        builder = builder.{{ attr.name }}(f);
+                    }
+{% else %}
+                    if let Some(s) = val.as_str() {
+                        builder = builder.{{ attr.name }}(s);
+                    }
+{% endif %}
+                }
+{% endfor %}
+
+                if let Ok(built) = builder.build() {
+                    block_items.push(built);
+                }
+            }
+            if !block_items.is_empty() {
+                request = request.{{ block.sdk_accessor_method }}(block_items);
+            }
+        }
+{% else %}
+        // Single {{ block.name }} block
+        let mut builder = {{ provider | sdk_crate_module(service_name=service_name) }}::types::{{ block.sdk_type_name }}::builder();
+
+{% for attr in block.attributes %}
+        if let Some(val) = block_data.get("{{ attr.name }}") {
+{% if attr.field_type == "String" %}
+            if let Some(s) = val.as_str() {
+                builder = builder.{{ attr.name }}(s);
+            }
+{% elif attr.field_type == "Integer" %}
+            if let Some(n) = val.as_i64() {
+                builder = builder.{{ attr.name }}(n as i32);
+            }
+{% elif attr.field_type == "Boolean" %}
+            if let Some(b) = val.as_bool() {
+                builder = builder.{{ attr.name }}(b);
+            }
+{% elif attr.field_type == "Float" %}
+            if let Some(f) = val.as_f64() {
+                builder = builder.{{ attr.name }}(f);
+            }
+{% else %}
+            if let Some(s) = val.as_str() {
+                builder = builder.{{ attr.name }}(s);
+            }
+{% endif %}
+        }
+{% endfor %}
+
+        if let Ok(built) = builder.build() {
+            request = request.{{ block.sdk_accessor_method }}(built);
+        }
+{% endif %}
+{% else %}
+        // SDK metadata not available for {{ block.name }} - skipping
+        warn!("Nested block {{ block.name }} detected but SDK metadata not available");
+{% endif %}
+    }
 {% endfor %}
 
     match request.send().await {

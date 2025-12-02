@@ -374,10 +374,7 @@ fn test_parse_smithy_with_nested_blocks() {
     println!("   Service: {}", service_def.name);
     println!("   Resources: {}", service_def.resources.len());
     println!("   Lifecycle rules block:");
-    println!(
-        "     - SDK type: {:?}",
-        lifecycle_rules_block.sdk_type_name
-    );
+    println!("     - SDK type: {:?}", lifecycle_rules_block.sdk_type_name);
     println!(
         "     - SDK accessor: {:?}",
         lifecycle_rules_block.sdk_accessor_method
