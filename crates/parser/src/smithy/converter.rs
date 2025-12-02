@@ -322,9 +322,16 @@ fn try_extract_block_from_member(
 
     match target_shape {
         // List of structures → List block
-        Some(Shape::List { member: list_member, .. }) => {
+        Some(Shape::List {
+            member: list_member,
+            ..
+        }) => {
             if let Some(item_shape) = model.get_shape(&list_member.target) {
-                if let Shape::Structure { members: item_members, .. } = item_shape {
+                if let Shape::Structure {
+                    members: item_members,
+                    ..
+                } = item_shape
+                {
                     // This is a list of structures - perfect for a block!
                     let attributes = extract_fields_from_structure_members(model, item_members)?;
                     let nested_blocks = detect_nested_blocks_from_structure(model, item_shape)?;
@@ -342,11 +349,15 @@ fn try_extract_block_from_member(
             }
         }
         // Single structure → Single block
-        Some(Shape::Structure { members: nested_members, .. }) => {
+        Some(Shape::Structure {
+            members: nested_members,
+            ..
+        }) => {
             // Skip if this looks like a simple wrapper (only 1-2 primitive fields)
             if is_complex_structure(model, nested_members) {
                 let attributes = extract_fields_from_structure_members(model, nested_members)?;
-                let nested_blocks = detect_nested_blocks_from_structure(model, target_shape.unwrap())?;
+                let nested_blocks =
+                    detect_nested_blocks_from_structure(model, target_shape.unwrap())?;
 
                 return Ok(Some(BlockDefinition {
                     name: to_snake_case(member_name),
@@ -427,7 +438,10 @@ fn is_potential_block_member(model: &SmithyModel, member: &super::types::Member)
     if let Some(shape) = model.get_shape(&member.target) {
         match shape {
             // Lists of structures are blocks
-            Shape::List { member: list_member, .. } => {
+            Shape::List {
+                member: list_member,
+                ..
+            } => {
                 if let Some(item_shape) = model.get_shape(&list_member.target) {
                     matches!(item_shape, Shape::Structure { .. })
                 } else {

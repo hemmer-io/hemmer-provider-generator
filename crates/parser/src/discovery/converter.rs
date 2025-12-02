@@ -153,11 +153,12 @@ fn build_resource_from_methods(
     };
 
     // Detect nested blocks from create/update method
-    let blocks = if let Some(ref create_method) = methods.create.as_ref().or(methods.update.as_ref()) {
-        extract_blocks_from_method(doc, create_method)?
-    } else {
-        Vec::new()
-    };
+    let blocks =
+        if let Some(ref create_method) = methods.create.as_ref().or(methods.update.as_ref()) {
+            extract_blocks_from_method(doc, create_method)?
+        } else {
+            Vec::new()
+        };
 
     // Get description
     let description = methods
@@ -355,7 +356,9 @@ fn try_extract_block_from_property(
         // Single object → Single block
         Some("object") => {
             // Skip if this is a simple map (has additional_properties but no properties)
-            if resolved_schema.additional_properties.is_some() && resolved_schema.properties.is_empty() {
+            if resolved_schema.additional_properties.is_some()
+                && resolved_schema.properties.is_empty()
+            {
                 return Ok(None);
             }
 

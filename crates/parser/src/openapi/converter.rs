@@ -376,8 +376,8 @@ fn try_extract_block_from_property(
 
                 // Check if items are objects (not primitive types)
                 if items_schema.schema_type.as_deref() == Some("object")
-                    || items_schema.ref_path.is_some() {
-
+                    || items_schema.ref_path.is_some()
+                {
                     // This is an array of objects - perfect for a block!
                     let attributes = extract_fields_from_schema_for_block(spec, items_schema)?;
                     let nested_blocks = detect_nested_blocks_from_schema(spec, items)?;
