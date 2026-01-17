@@ -252,7 +252,7 @@ impl AwsParser {
                         create_input_struct = Some(input_name);
                         ops.create = Some(mapping);
                     }
-                }
+                },
                 CrudOperation::Read => {
                     if ops.read.is_none() {
                         // Track the Output struct name for output extraction
@@ -260,17 +260,17 @@ impl AwsParser {
                         read_output_struct = Some(output_name);
                         ops.read = Some(mapping);
                     }
-                }
+                },
                 CrudOperation::Update => {
                     if ops.update.is_none() {
                         ops.update = Some(mapping);
                     }
-                }
+                },
                 CrudOperation::Delete => {
                     if ops.delete.is_none() {
                         ops.delete = Some(mapping);
                     }
-                }
+                },
             }
         }
 

@@ -238,11 +238,11 @@ fn kcl_type_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Resul
                 "[{}]",
                 inner.replace("String", "str").replace("Integer", "int")
             )
-        }
+        },
         _ if kcl_type.starts_with("Map<") => {
             // Convert Map<K,V> -> {k: v}
             "{str: str}".to_string() // Simplified for now
-        }
+        },
         _ => "str".to_string(), // Default fallback
     };
 
@@ -327,7 +327,7 @@ fn sdk_dependency_filter(value: &Value, args: &HashMap<String, Value>) -> tera::
                 | "resourcegroupstaggingapi"
                 | "marketplaceentitlementservice" => {
                     return Ok(Value::String(String::new()));
-                }
+                },
 
                 // Default: remove underscores from service name
                 _ => service_name,
@@ -335,7 +335,7 @@ fn sdk_dependency_filter(value: &Value, args: &HashMap<String, Value>) -> tera::
 
             // Remove underscores for all AWS SDK crates
             format!("aws-sdk-{}", normalized.replace("_", ""))
-        }
+        },
         "Gcp" => format!("google-{}", service_name),
         "Azure" => format!("azure-{}", service_name),
         _ => {
@@ -343,7 +343,7 @@ fn sdk_dependency_filter(value: &Value, args: &HashMap<String, Value>) -> tera::
                 "Unsupported provider for sdk_dependency: {}",
                 provider
             )))
-        }
+        },
     };
 
     Ok(Value::String(dependency))
@@ -430,7 +430,7 @@ fn field_type_to_jcl(field_type: &hemmer_provider_generator_common::FieldType) -
                 field_type_to_jcl(key),
                 field_type_to_jcl(value)
             )
-        }
+        },
         FieldType::Enum(_) => "string".to_string(), // Enums represented as strings in JCL
         FieldType::Object(_) => "object".to_string(), // Complex objects
     }
@@ -467,11 +467,11 @@ fn field_type_to_sdk_attr(field_type: &hemmer_provider_generator_common::FieldTy
         FieldType::DateTime => "AttributeType::String".to_string(), // DateTime as string
         FieldType::List(inner) => {
             format!("AttributeType::list({})", field_type_to_sdk_attr(inner))
-        }
+        },
         FieldType::Map(_key, value) => {
             // SDK Map type only takes value type (keys are always strings)
             format!("AttributeType::map({})", field_type_to_sdk_attr(value))
-        }
+        },
         FieldType::Enum(_) => "AttributeType::String".to_string(), // Enums as strings
         FieldType::Object(_) => "AttributeType::Dynamic".to_string(), // Complex objects as dynamic
     }
@@ -500,7 +500,7 @@ fn client_type_filter(value: &Value, args: &HashMap<String, Value>) -> tera::Res
                 "Unknown provider: {}",
                 provider_str
             )))
-        }
+        },
     };
 
     let service_name = args
@@ -534,7 +534,7 @@ fn sdk_crate_module_filter(value: &Value, args: &HashMap<String, Value>) -> tera
                 "Unknown provider: {}",
                 provider_str
             )))
-        }
+        },
     };
 
     let service_name = args
@@ -567,7 +567,7 @@ fn has_config_crate_filter(value: &Value, _args: &HashMap<String, Value>) -> ter
                 "Unknown provider: {}",
                 provider_str
             )))
-        }
+        },
     };
 
     let has_config = provider.sdk_config().config_crate.is_some();
@@ -593,7 +593,7 @@ fn config_crate_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::R
                 "Unknown provider: {}",
                 provider_str
             )))
-        }
+        },
     };
 
     let config_crate = provider.sdk_config().config_crate.unwrap_or_default();
@@ -619,7 +619,7 @@ fn uses_shared_client_filter(value: &Value, _args: &HashMap<String, Value>) -> t
                 "Unknown provider: {}",
                 provider_str
             )))
-        }
+        },
     };
 
     Ok(Value::Bool(provider.uses_shared_client()))

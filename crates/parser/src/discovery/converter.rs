@@ -112,13 +112,13 @@ fn classify_method(method_name: &str, method: &Method, methods: &mut ResourceMet
                 "GET" => methods.read = methods.read.clone().or_else(|| Some(method.clone())),
                 "PUT" | "PATCH" => {
                     methods.update = methods.update.clone().or_else(|| Some(method.clone()))
-                }
+                },
                 "DELETE" => {
                     methods.delete = methods.delete.clone().or_else(|| Some(method.clone()))
-                }
-                _ => {}
+                },
+                _ => {},
             }
-        }
+        },
     }
 }
 
@@ -360,7 +360,7 @@ fn try_extract_block_from_property(
                     }));
                 }
             }
-        }
+        },
         // Single object → Single block
         Some("object") => {
             // Skip if this is a simple map (has additional_properties but no properties)
@@ -393,8 +393,8 @@ fn try_extract_block_from_property(
                     sdk_accessor_method,
                 }));
             }
-        }
-        _ => {}
+        },
+        _ => {},
     }
 
     Ok(None)
@@ -420,7 +420,7 @@ fn is_complex_schema(doc: &DiscoveryDoc, schema: &Schema) -> bool {
 
         match resolved.schema_type.as_deref() {
             Some("object") | Some("array") => return true,
-            _ => {}
+            _ => {},
         }
     }
 
@@ -499,7 +499,7 @@ fn is_potential_block_property(doc: &DiscoveryDoc, schema: &Schema) -> bool {
             } else {
                 false
             }
-        }
+        },
         // Complex objects (not simple maps)
         Some("object") => {
             if resolved.additional_properties.is_some() && resolved.properties.is_empty() {
@@ -507,7 +507,7 @@ fn is_potential_block_property(doc: &DiscoveryDoc, schema: &Schema) -> bool {
             } else {
                 is_complex_schema(doc, resolved)
             }
-        }
+        },
         _ => false,
     }
 }
@@ -537,7 +537,7 @@ fn convert_schema_to_field_type(doc: &DiscoveryDoc, schema: &Schema) -> Result<F
             } else {
                 Ok(FieldType::List(Box::new(FieldType::String)))
             }
-        }
+        },
         Some("object") => {
             if let Some(ref additional_props) = schema.additional_properties {
                 // This is a map
@@ -549,7 +549,7 @@ fn convert_schema_to_field_type(doc: &DiscoveryDoc, schema: &Schema) -> Result<F
             } else {
                 Ok(FieldType::String) // Complex object, default to string
             }
-        }
+        },
         _ => Ok(FieldType::String), // Default fallback
     }
 }

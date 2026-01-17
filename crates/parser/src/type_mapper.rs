@@ -37,7 +37,7 @@ impl TypeMapper {
                     .and_then(|s| s.strip_suffix('>'))
                     .unwrap_or("String");
                 FieldType::List(Box::new(Self::map_type(inner)))
-            }
+            },
             s if s.starts_with("HashMap<") => {
                 // Parse HashMap<K, V>
                 let inner = s
@@ -54,12 +54,12 @@ impl TypeMapper {
                     // Default to String -> String map
                     FieldType::Map(Box::new(FieldType::String), Box::new(FieldType::String))
                 }
-            }
+            },
             "DateTime" => FieldType::DateTime,
             _ => {
                 // Unknown types default to String (enum variants, custom types)
                 FieldType::String
-            }
+            },
         }
     }
 

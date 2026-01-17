@@ -355,7 +355,7 @@ fn try_extract_block_from_member(
                     }));
                 }
             }
-        }
+        },
         // Single structure → Single block
         Some(Shape::Structure {
             members: nested_members,
@@ -385,8 +385,8 @@ fn try_extract_block_from_member(
                     sdk_accessor_method: Some(sdk_accessor_method),
                 }));
             }
-        }
-        _ => {}
+        },
+        _ => {},
     }
 
     Ok(None)
@@ -462,7 +462,7 @@ fn is_potential_block_member(model: &SmithyModel, member: &super::types::Member)
                 } else {
                     false
                 }
-            }
+            },
             // Complex structures are blocks
             Shape::Structure { members, .. } => is_complex_structure(model, members),
             _ => false,
@@ -502,12 +502,12 @@ fn convert_smithy_type_to_field_type(model: &SmithyModel, shape_id: &str) -> Res
             Shape::List { member, .. } => {
                 let inner_type = convert_smithy_type_to_field_type(model, &member.target)?;
                 Ok(FieldType::List(Box::new(inner_type)))
-            }
+            },
             Shape::Map { key, value, .. } => {
                 let key_type = convert_smithy_type_to_field_type(model, &key.target)?;
                 let value_type = convert_smithy_type_to_field_type(model, &value.target)?;
                 Ok(FieldType::Map(Box::new(key_type), Box::new(value_type)))
-            }
+            },
             _ => Ok(FieldType::String), // Default fallback
         }
     } else {
