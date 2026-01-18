@@ -220,8 +220,8 @@ fn test_generate_s3_provider() {
         "Should have AWS SDK dependency"
     );
     assert!(
-        cargo_toml.contains("hemmer-provider-sdk = \"0.3\""),
-        "Should have Hemmer SDK 0.3+ dependency for ProviderError variants"
+        cargo_toml.contains("hemmer-provider-sdk = \"0.3.1\""),
+        "Should have Hemmer SDK 0.3.1+ dependency for updated ProviderService signatures"
     );
     assert!(
         cargo_toml.contains("[[bin]]"),
@@ -285,4 +285,8 @@ fn test_generate_s3_provider() {
     );
 
     println!("✅ Provider generated successfully to: {:?}", output_path);
+
+    // Note: Full compilation testing requires realistic service definitions
+    // See issue #91 for comprehensive integration testing
+    println!("✅ Generated code structure verified (full compilation testing in #91)");
 }

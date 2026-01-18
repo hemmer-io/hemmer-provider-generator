@@ -9,8 +9,8 @@ pub mod resources;
 
 use hemmer_provider_sdk::{
     async_trait, serde_json, tonic,
-    ProviderService, ProviderSchema, Schema, Block, BlockType, NestingMode, Attribute, AttributeType, AttributeFlags,
-    PlanResult, AttributeChange, ImportedResource, ProviderMetadata, ServerCapabilities,
+    ProviderService, ProviderSchema, PlanResult, AttributeChange, ImportedResource, ProviderMetadata, ServerCapabilities,
+    schema::{Schema, Block, BlockType, NestingMode, Attribute, AttributeType, AttributeFlags, Diagnostic},
     // Protocol versioning - re-export for visibility
     PROTOCOL_VERSION, MIN_PROTOCOL_VERSION, check_protocol_version,
 };
@@ -29,7 +29,7 @@ use hemmer_provider_sdk::ProviderError;
 
 {% if provider == "Aws" %}
 // AWS SDK error handling
-use {{ provider | config_crate(service_name=service_name) }}::error::ProvideErrorMetadata;
+use aws_smithy_types::error::metadata::ProvideErrorMetadata;
 
 /// Categorize AWS SDK error codes and convert to ProviderError
 fn categorize_aws_error_code(code: Option<&str>, message: String) -> ProviderError {
@@ -136,10 +136,10 @@ impl {{ service_name | capitalize }}Provider {
 
 {% if provider | has_config_crate %}
     /// Get the SDK client, returning an error if not configured
-    async fn get_client(&self) -> std::result::Result<{{ provider | client_type(service_name=service_name) }}, tonic::Status> {
+    async fn get_client(&self) -> std::result::Result<{{ provider | client_type(service_name=service_name) }}, ProviderError> {
         let guard = self.client.read().await;
         guard.clone().ok_or_else(|| {
-            tonic::Status::failed_precondition("Provider not configured. Call configure() first.")
+            ProviderError::InvalidRequest("Provider not configured. Call configure() first.".to_string())
         })
     }
 {% endif %}
@@ -305,7 +305,7 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
     async fn configure(
         &self,
         config: serde_json::Value,
-    ) -> std::result::Result<Vec<tonic::Status>, tonic::Status> {
+    ) -> std::result::Result<Vec<Diagnostic>, ProviderError> {
         info!("Configuring {{ service_name }} provider");
         debug!("Config: {:?}", config);
 
@@ -341,8 +341,8 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
         resource_type: &str,
         prior_state: Option<serde_json::Value>,
         proposed_state: serde_json::Value,
-        _config: serde_json::Value,
-    ) -> std::result::Result<PlanResult, tonic::Status> {
+        config: serde_json::Value,
+    ) -> std::result::Result<PlanResult, ProviderError> {
         debug!("Planning {} resource", resource_type);
 
         // Compute diff between prior and proposed states
@@ -396,8 +396,7 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
         &self,
         resource_type: &str,
         planned_state: serde_json::Value,
-        _config: serde_json::Value,
-    ) -> std::result::Result<serde_json::Value, tonic::Status> {
+    ) -> std::result::Result<serde_json::Value, ProviderError> {
         info!("Creating {} resource", resource_type);
 
 {% if provider | has_config_crate %}
@@ -767,10 +766,7 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
 {% endfor %}
             _ => {
                 error!("Unknown resource type: {}", resource_type);
-                Err(tonic::Status::not_found(format!(
-                    "Unknown resource type: {}",
-                    resource_type
-                )))
+                Err(ProviderError::UnknownResource(resource_type.to_string()))
             }
         }
     }
@@ -779,8 +775,7 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
         &self,
         resource_type: &str,
         current_state: serde_json::Value,
-        _config: serde_json::Value,
-    ) -> std::result::Result<serde_json::Value, tonic::Status> {
+    ) -> std::result::Result<serde_json::Value, ProviderError> {
         debug!("Reading {} resource", resource_type);
 
 {% if provider | has_config_crate %}
@@ -1094,20 +1089,16 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
 {% endif %}
             }
 {% endfor %}
-            _ => Err(tonic::Status::not_found(format!(
-                "Unknown resource type: {}",
-                resource_type
-            ))),
+            _ => Err(ProviderError::UnknownResource(resource_type.to_string())),
         }
     }
 
     async fn update(
         &self,
         resource_type: &str,
-        _prior_state: serde_json::Value,
+        prior_state: serde_json::Value,
         planned_state: serde_json::Value,
-        _config: serde_json::Value,
-    ) -> std::result::Result<serde_json::Value, tonic::Status> {
+    ) -> std::result::Result<serde_json::Value, ProviderError> {
         info!("Updating {} resource", resource_type);
 
 {% if provider | has_config_crate %}
@@ -1421,10 +1412,7 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
 {% endif %}
             }
 {% endfor %}
-            _ => Err(tonic::Status::not_found(format!(
-                "Unknown resource type: {}",
-                resource_type
-            ))),
+            _ => Err(ProviderError::UnknownResource(resource_type.to_string())),
         }
     }
 
@@ -1432,8 +1420,7 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
         &self,
         resource_type: &str,
         current_state: serde_json::Value,
-        _config: serde_json::Value,
-    ) -> std::result::Result<(), tonic::Status> {
+    ) -> std::result::Result<(), ProviderError> {
         info!("Deleting {} resource", resource_type);
 
 {% if provider | has_config_crate %}
@@ -1476,10 +1463,7 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
 {% endif %}
             }
 {% endfor %}
-            _ => Err(tonic::Status::not_found(format!(
-                "Unknown resource type: {}",
-                resource_type
-            ))),
+            _ => Err(ProviderError::UnknownResource(resource_type.to_string())),
         }
     }
 

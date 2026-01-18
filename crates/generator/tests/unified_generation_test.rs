@@ -229,7 +229,7 @@ fn test_generate_unified_aws_provider() {
     assert!(cargo_toml_content.contains("hemmer-aws-provider"));
     assert!(cargo_toml_content.contains("aws-sdk-s3"));
     assert!(cargo_toml_content.contains("aws-sdk-dynamodb"));
-    assert!(cargo_toml_content.contains("hemmer-provider-sdk = \"0.3\""));
+    assert!(cargo_toml_content.contains("hemmer-provider-sdk = \"0.3.1\""));
     assert!(cargo_toml_content.contains("[[bin]]"));
 
     // Verify content of main.rs
@@ -248,6 +248,10 @@ fn test_generate_unified_aws_provider() {
     assert!(lib_rs_content.contains("fn schema(&self)"));
     assert!(lib_rs_content.contains("PROTOCOL_VERSION"));
     assert!(lib_rs_content.contains("SDK_PROTOCOL_VERSION"));
+
+    // Note: Full compilation testing requires realistic service definitions
+    // See issue #91 for comprehensive integration testing
+    println!("✅ Generated unified code structure verified (full compilation testing in #91)");
 
     // Clean up
     fs::remove_dir_all(&output_dir).expect("Failed to clean up test directory");
