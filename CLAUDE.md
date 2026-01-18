@@ -75,7 +75,7 @@ The project uses a spec-based approach with universal intermediate representatio
 
 ## Workspace Structure
 
-This is a Cargo workspace with 4 crates:
+This is a Cargo workspace with 5 crates:
 
 ```
 hemmer-provider-generator/
@@ -117,10 +117,23 @@ hemmer-provider-generator/
 │   │   ├── templates/              # Tera templates (21 files)
 │   │   └── tests/
 │   │       └── generation_test.rs
+│   ├── analyzer/                   # SDK analyzer (Phase 3)
+│   │   ├── Cargo.toml
+│   │   ├── README.md               # Analyzer documentation
+│   │   └── src/
+│   │       ├── lib.rs              # SdkAnalyzer, AnalysisResult
+│   │       ├── analyzer.rs         # Core orchestration
+│   │       ├── workspace_detector.rs  # cargo_metadata analysis
+│   │       ├── crate_pattern_detector.rs  # Crate naming patterns
+│   │       ├── client_detector.rs  # Client type detection (syn)
+│   │       ├── config_detector.rs  # Config pattern detection
+│   │       ├── error_detector.rs   # Error categorization
+│   │       ├── confidence.rs       # Confidence scoring
+│   │       └── output.rs           # YAML generation
 │   └── cli/                        # CLI interface
 │       ├── Cargo.toml
 │       └── src/
-│           └── main.rs             # parse, generate, generate-unified commands
+│           └── main.rs             # parse, generate, generate-unified, analyze-sdk commands
 ├── LICENSE                         # Apache 2.0
 ├── README.md                       # User-facing documentation
 └── CONTRIBUTING.md                 # Contribution guidelines
@@ -276,6 +289,62 @@ provider-{name}/
 - Phase 4: Spec Format Parsers (Smithy, OpenAPI, Discovery, Protobuf)
 - Phase 5: CLI Interface and Production Readiness
 - Phase 6: Multi-Service Unified Providers
+
+### Phase 3 (New): SDK Analyzer Tool (✅ MVP Complete - 2026-01-18)
+
+**Status**: MVP Complete
+
+**Goal**: Automate 75% of provider metadata generation by analyzing SDK repositories.
+
+**Implementation**: `crates/analyzer/`
+
+The SDK Analyzer automatically generates Phase 2 metadata YAML files by analyzing provider SDK repositories. This eliminates manual provider configuration and reduces provider addition time from ~4 hours to ~30 minutes.
+
+**Key Features**:
+- **Workspace Detection**: Uses `cargo_metadata` to analyze Cargo workspace structure
+- **Crate Pattern Detection**: Identifies SDK crate naming patterns (e.g., `aws-sdk-{service}`)
+- **Client Type Detection**: Parses Rust AST with `syn` to find Client type patterns
+- **Config Detection**: Discovers configuration crates and attributes
+- **Error Categorization**: Maps error variants to standard categories using heuristics
+- **Confidence Scoring**: Provides 0.0-1.0 confidence scores for each field
+- **Annotated Output**: Generates YAML with TODO markers for low-confidence fields
+
+**CLI Command**:
+```bash
+# Analyze SDK repository
+hemmer-provider-generator analyze-sdk \
+  --sdk-path ~/code/aws-sdk-rust \
+  --name aws \
+  --output providers/aws.sdk-metadata.yaml
+```
+
+**Architecture**:
+```
+crates/analyzer/
+├── src/
+│   ├── analyzer.rs               # Core orchestration
+│   ├── workspace_detector.rs     # Cargo workspace analysis
+│   ├── crate_pattern_detector.rs # Crate naming patterns
+│   ├── client_detector.rs        # Client type detection (syn)
+│   ├── config_detector.rs        # Config pattern detection
+│   ├── error_detector.rs         # Error categorization heuristics
+│   ├── confidence.rs             # Confidence scoring (weighted)
+│   └── output.rs                 # Annotated YAML generation
+```
+
+**Confidence Scoring**:
+- Overall = weighted average (crate: 30%, client: 30%, config_crate: 15%, config_attrs: 5%, errors: 20%)
+- HIGH (0.8-1.0): Can use as-is
+- MEDIUM (0.6-0.8): Verify before use
+- LOW (<0.6): Needs manual review
+
+**Test Coverage**: 25 unit tests
+
+**Future Enhancements**:
+- [ ] Git repository cloning support (issue #116)
+- [ ] Interactive mode for ambiguous fields
+- [ ] Incremental metadata updates
+- [ ] ML-based pattern detection
 
 ### Phase 7: Comprehensive gRPC Providers (In Progress)
 
@@ -675,4 +744,4 @@ cargo run --bin hemmer-provider-generator -- --help
 
 ---
 
-**Last Updated**: 2026-01-18 (Phase 2 - SDK Metadata Files Complete, Phase 7 In Progress)
+**Last Updated**: 2026-01-18 (Phase 2 - SDK Metadata Files Complete, Phase 3 - SDK Analyzer MVP Complete, Phase 7 In Progress)

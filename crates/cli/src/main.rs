@@ -5,6 +5,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use colored::*;
+use hemmer_provider_generator_analyzer::SdkAnalyzer;
 use hemmer_provider_generator_common::sanitize_rust_identifier;
 use hemmer_provider_generator_generator::{ProviderGenerator, UnifiedProviderGenerator};
 use hemmer_provider_generator_parser::{
@@ -147,6 +148,40 @@ enum Commands {
         #[arg(short, long, default_value = "./output")]
         output: PathBuf,
     },
+
+    /// Analyze an SDK repository and generate provider metadata YAML
+    #[command(after_help = "EXAMPLES:\n  \
+        # Analyze local SDK checkout\n  \
+        hemmer-provider-generator analyze-sdk \\\n    \
+        --sdk-path ~/code/aws-sdk-rust \\\n    \
+        --name aws\n\n  \
+        # Custom output location\n  \
+        hemmer-provider-generator analyze-sdk \\\n    \
+        --sdk-path ./custom-sdk \\\n    \
+        --name custom-cloud \\\n    \
+        --output ./my-providers/custom.yaml\n\n  \
+        # Set minimum confidence threshold\n  \
+        hemmer-provider-generator analyze-sdk \\\n    \
+        --sdk-path ./sdk \\\n    \
+        --name provider \\\n    \
+        --min-confidence 0.6")]
+    AnalyzeSdk {
+        /// Path to SDK repository (local directory)
+        #[arg(short, long)]
+        sdk_path: PathBuf,
+
+        /// Provider name (e.g., "aws", "custom-cloud")
+        #[arg(short, long)]
+        name: String,
+
+        /// Output path (defaults to providers/{name}.sdk-metadata.yaml)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Minimum confidence threshold (0.0-1.0)
+        #[arg(long, default_value = "0.5")]
+        min_confidence: f32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -232,6 +267,21 @@ fn main() -> Result<()> {
                 output: output.as_path(),
                 verbose: cli.verbose,
             })?;
+        },
+
+        Commands::AnalyzeSdk {
+            sdk_path,
+            name,
+            output,
+            min_confidence,
+        } => {
+            analyze_sdk_command(
+                sdk_path.as_path(),
+                &name,
+                output.as_deref(),
+                min_confidence,
+                cli.verbose,
+            )?;
         },
     }
 
@@ -897,6 +947,83 @@ fn discover_specs(
     println!("{} Discovered {} spec files", "✓".green(), specs.len());
 
     Ok(specs)
+}
+
+/// Analyze SDK repository and generate metadata YAML
+fn analyze_sdk_command(
+    sdk_path: &Path,
+    name: &str,
+    output: Option<&Path>,
+    min_confidence: f32,
+    verbose: bool,
+) -> Result<()> {
+    println!("{} Analyzing SDK at: {}", "→".cyan(), sdk_path.display());
+    println!("{} Provider name: {}", "→".cyan(), name);
+
+    // Validate SDK path exists
+    if !sdk_path.exists() {
+        anyhow::bail!("SDK path does not exist: {}", sdk_path.display());
+    }
+
+    if !sdk_path.is_dir() {
+        anyhow::bail!("SDK path must be a directory: {}", sdk_path.display());
+    }
+
+    // Create analyzer
+    let analyzer = SdkAnalyzer::new(sdk_path.to_path_buf(), name.to_string())
+        .verbose(verbose);
+
+    // Run analysis
+    let result = analyzer
+        .analyze()
+        .context("Failed to analyze SDK repository")?;
+
+    // Print summary
+    result.print_summary();
+
+    // Check minimum confidence
+    if result.confidence.overall < min_confidence {
+        eprintln!(
+            "\n{} Overall confidence ({:.2}) is below minimum threshold ({:.2})",
+            "⚠".yellow(),
+            result.confidence.overall,
+            min_confidence
+        );
+        eprintln!("  Generated metadata may require significant manual review.");
+    }
+
+    // Print warnings
+    result.print_warnings();
+
+    // Determine output path
+    let output_path = output
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from(format!("providers/{}.sdk-metadata.yaml", name)));
+
+    // Create output directory if needed
+    if let Some(parent) = output_path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create output directory: {}", parent.display()))?;
+    }
+
+    // Write YAML
+    result
+        .write_yaml(output_path.to_str().unwrap())
+        .context("Failed to write YAML file")?;
+
+    println!(
+        "\n{} Generated metadata: {}",
+        "✓".green(),
+        output_path.display()
+    );
+
+    println!("\n{} Next steps:", "→".cyan());
+    println!("  1. Review the generated YAML file");
+    println!("  2. Update TODO fields marked in comments");
+    println!("  3. Test metadata with generate-unified command");
+    println!("  4. Iterate if needed");
+
+    Ok(())
 }
 
 fn matches_format(detected: &SpecFormat, expected: &SpecFormat) -> bool {

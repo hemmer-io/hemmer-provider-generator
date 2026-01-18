@@ -1,0 +1,37 @@
+[package]
+name = "hemmer-provider-generator-analyzer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "SDK analyzer for Hemmer Provider Generator - automatically generates provider metadata"
+
+[dependencies]
+hemmer-provider-generator-common = { version = "0.3.5", path = "../common" }
+
+# Cargo workspace analysis
+cargo_metadata = "0.18"
+
+# Rust AST parsing for client detection
+syn = { version = "2.0", features = ["full", "parsing"] }
+
+# File system traversal
+walkdir = "2.4"
+
+# Serialization
+serde = { workspace = true }
+serde_yaml = "0.9"
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Regex for pattern matching
+regex = "1.10"
+
+# Timestamps for output
+chrono = "0.4"
+
+[dev-dependencies]
+tempfile = "3.0"
