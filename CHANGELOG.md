@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-01-18
+
+### Added
+
+- **Phase 3: SDK Analyzer Tool** (#117)
+  - Automated SDK analysis that generates Phase 2 metadata YAML files
+  - Achieves 75%+ automation for adding new cloud providers
+  - Reduces provider addition time from ~4 hours to ~30 minutes
+  - New `analyze-sdk` CLI command with confidence scoring
+  - Support for AWS, GCP, and Kubernetes SDK analysis
+  - Intelligent workspace detection and crate pattern recognition
+  - AST-based client type detection using `syn` crate
+  - Monolithic SDK detection (e.g., Kubernetes-style)
+  - Primary crate detection (handwritten vs generated)
+  - Enhanced infrastructure crate filtering (24+ patterns)
+  - Manual service filtering for edge cases
+  - Comprehensive test suite (28 tests)
+
+### Changed
+
+- Externalized provider configuration to YAML metadata files (Phase 2)
+  - Moved SDK patterns from hardcoded Rust to `providers/*.sdk-metadata.yaml`
+  - Added dynamic `Provider::Custom(String)` variant
+  - Eliminated provider-specific conditionals in code generation
+  - Error categorization now generated from YAML rules
+
 ## [0.3.5] - 2025-11-03
 
 ### Fixed

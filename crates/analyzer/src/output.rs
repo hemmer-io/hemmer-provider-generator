@@ -41,7 +41,7 @@ fn write_header(output: &mut String, confidence: &ConfidenceReport) -> Result<()
         "# Overall Confidence: {:.2} ({level})",
         confidence.overall
     )?;
-    writeln!(output, "# Analyzer Version: 0.3.5")?;
+    writeln!(output, "# Analyzer Version: 0.4.0")?;
     writeln!(output)?;
 
     Ok(())
