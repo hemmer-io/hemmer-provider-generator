@@ -75,11 +75,11 @@ impl WorkspaceInfo {
                     // e.g., filter "bigquery" matches "google-cloud-bigquery" but not "google-cloud-bigquery-v2"
                     let matches_filter = filter_list.iter().any(|filter| {
                         // Try common SDK patterns
-                        name == &format!("google-cloud-{}", filter)
-                            || name == &format!("aws-sdk-{}", filter)
-                            || name == &format!("azure-sdk-{}", filter)
-                            || name == &format!("gcp-sdk-{}", filter)
-                            || name == filter  // Exact match for edge cases
+                        name == format!("google-cloud-{}", filter)
+                            || name == format!("aws-sdk-{}", filter)
+                            || name == format!("azure-sdk-{}", filter)
+                            || name == format!("gcp-sdk-{}", filter)
+                            || name == filter.as_str()  // Exact match for edge cases
                     });
                     if !matches_filter {
                         return false; // Skip crates not matching filter
