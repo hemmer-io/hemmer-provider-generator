@@ -17,17 +17,15 @@ path = "src/main.rs"
 hemmer-provider-sdk = "0.3.1"
 
 # Cloud SDK dependencies
-{% if provider == "Kubernetes" %}# Kubernetes SDK dependencies (special case - uses shared kube client)
-kube = { version = "0.87", features = ["runtime", "derive"] }
-k8s-openapi = { version = "0.20", features = ["v1_28"] }
-{% else %}{% for service in services -%}
+{% for service in services -%}
 {%- set dep = provider | sdk_dependency(service_name=service.name) -%}
 {%- if dep != "" %}{{ dep }} = "1"
 {% endif -%}
-{%- endfor %}{% if provider == "Aws" %}aws-config = "1"
-aws-smithy-types = "1"
-aws-smithy-runtime-api = "1"
-{% endif %}{% endif %}
+{%- endfor %}
+# Provider-specific additional dependencies
+{% for dep in sdk_config.additional_dependencies %}
+{{ dep }}
+{% endfor %}
 
 # Standard dependencies
 anyhow = "1"
