@@ -164,7 +164,12 @@ enum Commands {
         hemmer-provider-generator analyze-sdk \\\n    \
         --sdk-path ./sdk \\\n    \
         --name provider \\\n    \
-        --min-confidence 0.6")]
+        --min-confidence 0.6\n\n  \
+        # Manually specify service crates (advanced)\n  \
+        hemmer-provider-generator analyze-sdk \\\n    \
+        --sdk-path ./gcp-sdk \\\n    \
+        --name gcp \\\n    \
+        --service-filter 'bigquery,storage,pubsub'")]
     AnalyzeSdk {
         /// Path to SDK repository (local directory)
         #[arg(short, long)]
@@ -181,6 +186,11 @@ enum Commands {
         /// Minimum confidence threshold (0.0-1.0)
         #[arg(long, default_value = "0.5")]
         min_confidence: f32,
+
+        /// Comma-separated list of service crate names to analyze (e.g., "bigquery,storage,pubsub")
+        /// Use this when auto-detection fails to filter correctly
+        #[arg(long)]
+        service_filter: Option<String>,
     },
 }
 
@@ -274,12 +284,14 @@ fn main() -> Result<()> {
             name,
             output,
             min_confidence,
+            service_filter,
         } => {
             analyze_sdk_command(
                 sdk_path.as_path(),
                 &name,
                 output.as_deref(),
                 min_confidence,
+                service_filter.as_deref(),
                 cli.verbose,
             )?;
         },
@@ -955,6 +967,7 @@ fn analyze_sdk_command(
     name: &str,
     output: Option<&Path>,
     min_confidence: f32,
+    service_filter: Option<&str>,
     verbose: bool,
 ) -> Result<()> {
     println!("{} Analyzing SDK at: {}", "→".cyan(), sdk_path.display());
@@ -969,9 +982,22 @@ fn analyze_sdk_command(
         anyhow::bail!("SDK path must be a directory: {}", sdk_path.display());
     }
 
+    // Parse service filter if provided
+    let service_filter_list = service_filter.map(|filter| {
+        filter.split(',').map(|s| s.trim().to_string()).collect::<Vec<_>>()
+    });
+
+    if let Some(ref filters) = service_filter_list {
+        println!("{} Service filter: {:?}", "→".cyan(), filters);
+    }
+
     // Create analyzer
-    let analyzer = SdkAnalyzer::new(sdk_path.to_path_buf(), name.to_string())
+    let mut analyzer = SdkAnalyzer::new(sdk_path.to_path_buf(), name.to_string())
         .verbose(verbose);
+
+    if let Some(filters) = service_filter_list {
+        analyzer = analyzer.with_service_filter(filters);
+    }
 
     // Run analysis
     let result = analyzer

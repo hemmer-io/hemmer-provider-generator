@@ -59,10 +59,32 @@ impl WorkspaceInfo {
     /// Filter packages to likely SDK service crates
     /// Uses positive pattern matching for known SDK prefixes, then excludes infrastructure
     pub fn sdk_crates(&self) -> Vec<&PackageInfo> {
+        self.sdk_crates_with_filter(None)
+    }
+
+    /// Filter packages with optional manual service filter
+    pub fn sdk_crates_with_filter(&self, service_filter: Option<&[String]>) -> Vec<&PackageInfo> {
         self.packages
             .iter()
             .filter(|p| {
                 let name = p.name.as_str();
+
+                // If manual filter provided, check if crate name matches any filter term
+                if let Some(filter_list) = service_filter {
+                    // For google-cloud-*, aws-sdk-*, etc., check exact match after prefix
+                    // e.g., filter "bigquery" matches "google-cloud-bigquery" but not "google-cloud-bigquery-v2"
+                    let matches_filter = filter_list.iter().any(|filter| {
+                        // Try common SDK patterns
+                        name == &format!("google-cloud-{}", filter)
+                            || name == &format!("aws-sdk-{}", filter)
+                            || name == &format!("azure-sdk-{}", filter)
+                            || name == &format!("gcp-sdk-{}", filter)
+                            || name == filter  // Exact match for edge cases
+                    });
+                    if !matches_filter {
+                        return false; // Skip crates not matching filter
+                    }
+                }
 
                 // First, check if it matches known SDK service patterns (positive matching)
                 let matches_sdk_pattern = name.starts_with("aws-sdk-")
@@ -112,22 +134,29 @@ impl WorkspaceInfo {
 
         // Common infrastructure components
         let infra_components = [
-            "smithy",      // aws-smithy-*
-            "runtime",     // aws-runtime, kube-runtime
-            "credential",  // aws-credential-types
-            "sigv4",       // aws-sigv4
-            "auth",        // google-cloud-auth
-            "base",        // google-cloud-base
-            "gax",         // google-cloud-gax (Google API Extensions)
-            "internal",    // gax-internal
-            "lro",         // Long-running operations
-            "wkt",         // Well-known types
-            "util",        // test-utils, utilities
-            "generated",   // Generated code directories
-            "guide",       // Documentation/guides
-            "integration", // Integration tests
-            "root",        // Root/meta crates
-            "validation",  // Validation helpers
+            "smithy",       // aws-smithy-*
+            "runtime",      // aws-runtime, kube-runtime
+            "credential",   // aws-credential-types
+            "sigv4",        // aws-sigv4
+            "auth",         // google-cloud-auth
+            "base",         // google-cloud-base
+            "gax",          // google-cloud-gax (Google API Extensions)
+            "internal",     // gax-internal
+            "lro",          // Long-running operations
+            "wkt",          // Well-known types
+            "util",         // test-utils, utilities
+            "generated",    // Generated code directories
+            "guide",        // Documentation/guides
+            "integration",  // Integration tests
+            "root",         // Root/meta crates
+            "validation",   // Validation helpers
+            "common",       // google-cloud-common (shared utilities)
+            "api",          // google-cloud-api (API helpers)
+            "rpc",          // google-cloud-rpc (RPC infrastructure)
+            "location",     // google-cloud-location (shared location types)
+            "longrunning",  // google-cloud-longrunning (LRO helpers)
+            "oslogin",      // google-cloud-oslogin-common
+            "-type",        // google-cloud-*-type (shared type definitions)
         ];
 
         infra_components.iter().any(|component| name.contains(component))
@@ -159,6 +188,37 @@ impl WorkspaceInfo {
                 .copied()
                 .or_else(|| sdk_crates.first().copied())
         }
+    }
+
+    /// Detect primary/handwritten crates vs generated crates
+    /// Returns crates that are likely handwritten (in src/* not src/generated/*)
+    pub fn primary_crates(&self) -> Vec<&PackageInfo> {
+        self.packages
+            .iter()
+            .filter(|p| {
+                let manifest_path = &p.manifest_path;
+                // Check if manifest is in a "primary" location (not in generated/)
+                !manifest_path.contains("generated")
+                    && !manifest_path.contains("_generated")
+                    && Self::is_likely_service_crate(&p.name)
+            })
+            .collect()
+    }
+
+    /// Check if crate name suggests it's a service crate (not infrastructure)
+    fn is_likely_service_crate(name: &str) -> bool {
+        // Must start with a known SDK prefix
+        let has_sdk_prefix = name.starts_with("google-cloud-")
+            || name.starts_with("aws-sdk-")
+            || name.starts_with("azure-sdk-")
+            || name.starts_with("gcp-sdk-");
+
+        if !has_sdk_prefix {
+            return false;
+        }
+
+        // Must not be infrastructure
+        !Self::is_infrastructure_crate(name) && !Self::is_non_sdk_crate(name)
     }
 }
 

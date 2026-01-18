@@ -35,6 +35,7 @@ pub struct SdkAnalyzer {
     repo_path: PathBuf,
     provider_name: String,
     verbose: bool,
+    service_filter: Option<Vec<String>>,
 }
 
 /// Complete analysis result
@@ -62,12 +63,19 @@ impl SdkAnalyzer {
             repo_path,
             provider_name,
             verbose: false,
+            service_filter: None,
         }
     }
 
     /// Enable verbose output
     pub fn verbose(mut self, verbose: bool) -> Self {
         self.verbose = verbose;
+        self
+    }
+
+    /// Set service filter (manually specify which crates to analyze)
+    pub fn with_service_filter(mut self, filter: Vec<String>) -> Self {
+        self.service_filter = Some(filter);
         self
     }
 
@@ -85,13 +93,30 @@ impl SdkAnalyzer {
             workspace.is_workspace
         ));
 
-        // Filter to SDK crates
-        let sdk_crates = workspace.sdk_crates();
+        // Filter to SDK crates (with optional manual filter)
+        let sdk_crates = if let Some(ref filter) = self.service_filter {
+            self.log(&format!("Using manual service filter: {:?}", filter));
+            workspace.sdk_crates_with_filter(Some(filter.as_slice()))
+        } else {
+            // Try to detect primary (handwritten) crates first
+            let primary = workspace.primary_crates();
+            if !primary.is_empty() && primary.len() < 20 {
+                // Use primary crates if we found a reasonable number
+                self.log(&format!(
+                    "Detected {} primary/handwritten crates (excluding generated)",
+                    primary.len()
+                ));
+                primary
+            } else {
+                workspace.sdk_crates()
+            }
+        };
+
         if sdk_crates.is_empty() {
             return Err(AnalyzerError::NoSdkCrates);
         }
 
-        self.log(&format!("Identified {} SDK crates", sdk_crates.len()));
+        self.log(&format!("Identified {} SDK crates for analysis", sdk_crates.len()));
 
         // Detect if this is a monolithic SDK (single client for all resources)
         let is_monolithic = workspace.is_monolithic();
