@@ -17,13 +17,10 @@ path = "src/main.rs"
 hemmer-provider-sdk = "0.3.1"
 
 # Cloud SDK dependencies
-{% if provider == "Aws" %}aws-sdk-{{ service_name }} = "1"
-aws-config = "1"
-aws-smithy-types = "1"
-aws-smithy-runtime-api = "1"
-{% elif provider == "Gcp" %}# GCP SDK dependencies
-{% elif provider == "Azure" %}# Azure SDK dependencies
-{% endif %}
+{{ provider | sdk_dependency(service_name=service_name) }} = "1"
+{% for dep in sdk_config.additional_dependencies %}
+{{ dep }}
+{% endfor %}
 
 # Standard dependencies
 anyhow = "1"

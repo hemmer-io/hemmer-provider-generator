@@ -27,90 +27,22 @@ pub use hemmer_provider_sdk::{PROTOCOL_VERSION as SDK_PROTOCOL_VERSION, MIN_PROT
 
 use hemmer_provider_sdk::ProviderError;
 
-{% if provider == "Aws" %}
-// AWS SDK error handling
-use aws_smithy_types::error::metadata::ProvideErrorMetadata;
+{% if sdk_config.error_metadata_import %}
+// Provider SDK error handling
+use {{ sdk_config.error_metadata_import }};
+{% endif %}
 
-/// Categorize AWS SDK error codes and convert to ProviderError
-fn categorize_aws_error_code(code: Option<&str>, message: String) -> ProviderError {
-    match code {
-        // Not Found errors
-        Some(c) if c.contains("NotFound") || c.contains("NoSuch") || c == "ResourceNotFoundException" => {
-            ProviderError::NotFound(message)
-        }
-        // Already Exists errors
-        Some(c) if c.contains("AlreadyExists") || c.contains("AlreadyOwned") || c == "EntityAlreadyExists" || c == "DuplicateRequest" => {
-            ProviderError::AlreadyExists(message)
-        }
-        // Permission Denied errors
-        Some(c) if c.contains("AccessDenied") || c.contains("Unauthorized") || c == "InvalidAccessKeyId" || c == "SignatureDoesNotMatch" || c == "ExpiredToken" || c == "InvalidToken" => {
-            ProviderError::PermissionDenied(message)
-        }
-        // Invalid Argument errors
-        Some(c) if c.contains("Invalid") || c.contains("Malformed") || c == "ValidationException" || c == "ValidationError" || c.contains("ParameterValue") => {
-            ProviderError::Validation(message)
-        }
-        // Failed Precondition errors
-        Some(c) if c.contains("NotEmpty") || c.contains("InUse") || c.contains("Conflict") || c == "OperationAborted" || c == "PreconditionFailed" || c == "ConditionalCheckFailedException" => {
-            ProviderError::FailedPrecondition(message)
-        }
-        // Resource Exhausted errors
-        Some(c) if c.contains("LimitExceeded") || c.contains("TooMany") || c == "SlowDown" || c == "Throttling" || c == "ThrottlingException" || c == "ProvisionedThroughputExceededException" || c == "RequestLimitExceeded" => {
-            ProviderError::ResourceExhausted(message)
-        }
-        // Unavailable errors
-        Some(c) if c == "ServiceUnavailable" || c == "InternalError" || c == "InternalFailure" || c.contains("ServiceException") => {
-            ProviderError::Unavailable(message)
-        }
-        // Deadline Exceeded errors
-        Some(c) if c == "RequestTimeout" || c == "RequestExpired" || c.contains("Timeout") => {
-            ProviderError::DeadlineExceeded(message)
-        }
-        // Unimplemented errors
-        Some(c) if c == "NotImplemented" || c == "UnsupportedOperation" => {
-            ProviderError::Unimplemented(message)
-        }
-        // Unknown/fallback
-        _ => ProviderError::Sdk(message),
-    }
-}
-
-/// Convert AWS SDK error to ProviderError (which can be converted to tonic::Status)
-fn sdk_error_to_provider_error<E, R>(error: &aws_smithy_runtime_api::client::result::SdkError<E, R>) -> ProviderError
-where
-    E: std::fmt::Debug + ProvideErrorMetadata,
-{
-    let message = format!("{:?}", error);
-
-    match error {
-        aws_smithy_runtime_api::client::result::SdkError::ServiceError(service_err) => {
-            let code = service_err.err().code();
-            debug!("AWS error code: {:?}", code);
-            categorize_aws_error_code(code, message)
-        }
-        aws_smithy_runtime_api::client::result::SdkError::TimeoutError(_) => {
-            ProviderError::DeadlineExceeded(message)
-        }
-        aws_smithy_runtime_api::client::result::SdkError::DispatchFailure(_) => {
-            ProviderError::Unavailable(message)
-        }
-        aws_smithy_runtime_api::client::result::SdkError::ResponseError(_) => {
-            ProviderError::Sdk(message)
-        }
-        aws_smithy_runtime_api::client::result::SdkError::ConstructionFailure(_) => {
-            ProviderError::Validation(message)
-        }
-        _ => ProviderError::Sdk(message),
-    }
-}
+{% if sdk_config.error_categorization_fn %}
+{{ sdk_config.error_categorization_fn }}
 {% else %}
 /// Convert SDK error to ProviderError (which can be converted to tonic::Status)
 fn sdk_error_to_provider_error<E: std::fmt::Debug>(error: &E) -> ProviderError {
-    // For non-AWS providers, default to SDK error
+    // For providers without custom error categorization, default to SDK error
     // Provider-specific error mapping can be added here
     ProviderError::Sdk(format!("{:?}", error))
 }
 {% endif %}
+
 
 /// {{ service_name | capitalize }} Provider
 pub struct {{ service_name | capitalize }}Provider {

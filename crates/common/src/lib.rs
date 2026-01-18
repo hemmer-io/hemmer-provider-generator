@@ -62,6 +62,15 @@ pub struct ProviderSdkConfig {
     pub config_attrs: Vec<ProviderConfigAttr>,
     /// Configuration code generation patterns
     pub config_codegen: ConfigCodegen,
+    /// Additional SDK dependencies required (beyond the service SDK crate)
+    /// Example: ["aws-config = \"1\"", "aws-smithy-types = \"1\""]
+    pub additional_dependencies: Vec<String>,
+    /// Error metadata trait import path (if provider has one)
+    /// Example: Some("aws_smithy_types::error::metadata::ProvideErrorMetadata")
+    pub error_metadata_import: Option<String>,
+    /// Error categorization function (Rust code as string)
+    /// This function converts SDK errors to ProviderError enum variants
+    pub error_categorization_fn: Option<String>,
 }
 
 /// A provider-specific configuration attribute with code generation metadata
@@ -145,6 +154,86 @@ impl Provider {
                     config_var_name: "config_loader".to_string(),
                     loaded_config_var_name: "sdk_config".to_string(),
                 },
+                additional_dependencies: vec![
+                    "aws-config = \"1\"".to_string(),
+                    "aws-smithy-types = \"1\"".to_string(),
+                    "aws-smithy-runtime-api = \"1\"".to_string(),
+                ],
+                error_metadata_import: Some("aws_smithy_types::error::metadata::ProvideErrorMetadata".to_string()),
+                error_categorization_fn: Some(r#"
+/// Categorize AWS SDK error codes and convert to ProviderError
+fn categorize_aws_error_code(code: Option<&str>, message: String) -> ProviderError {
+    match code {
+        // Not Found errors
+        Some(c) if c.contains("NotFound") || c.contains("NoSuch") || c == "ResourceNotFoundException" => {
+            ProviderError::NotFound(message)
+        }
+        // Already Exists errors
+        Some(c) if c.contains("AlreadyExists") || c.contains("AlreadyOwned") || c == "EntityAlreadyExists" || c == "DuplicateRequest" => {
+            ProviderError::AlreadyExists(message)
+        }
+        // Permission Denied errors
+        Some(c) if c.contains("AccessDenied") || c.contains("Unauthorized") || c == "InvalidAccessKeyId" || c == "SignatureDoesNotMatch" || c == "ExpiredToken" || c == "InvalidToken" => {
+            ProviderError::PermissionDenied(message)
+        }
+        // Invalid Argument errors
+        Some(c) if c.contains("Invalid") || c.contains("Malformed") || c == "ValidationException" || c == "ValidationError" || c.contains("ParameterValue") => {
+            ProviderError::Validation(message)
+        }
+        // Failed Precondition errors
+        Some(c) if c.contains("NotEmpty") || c.contains("InUse") || c.contains("Conflict") || c == "OperationAborted" || c == "PreconditionFailed" || c == "ConditionalCheckFailedException" => {
+            ProviderError::FailedPrecondition(message)
+        }
+        // Resource Exhausted errors
+        Some(c) if c.contains("LimitExceeded") || c.contains("TooMany") || c == "SlowDown" || c == "Throttling" || c == "ThrottlingException" || c == "ProvisionedThroughputExceededException" || c == "RequestLimitExceeded" => {
+            ProviderError::ResourceExhausted(message)
+        }
+        // Unavailable errors
+        Some(c) if c == "ServiceUnavailable" || c == "InternalError" || c == "InternalFailure" || c.contains("ServiceException") => {
+            ProviderError::Unavailable(message)
+        }
+        // Deadline Exceeded errors
+        Some(c) if c == "RequestTimeout" || c == "RequestExpired" || c.contains("Timeout") => {
+            ProviderError::DeadlineExceeded(message)
+        }
+        // Unimplemented errors
+        Some(c) if c == "NotImplemented" || c == "UnsupportedOperation" => {
+            ProviderError::Unimplemented(message)
+        }
+        // Unknown/fallback
+        _ => ProviderError::Sdk(message),
+    }
+}
+
+/// Convert AWS SDK error to ProviderError (which can be converted to tonic::Status)
+fn sdk_error_to_provider_error<E, R>(error: &aws_smithy_runtime_api::client::result::SdkError<E, R>) -> ProviderError
+where
+    E: std::fmt::Debug + ProvideErrorMetadata,
+{
+    let message = format!("{:?}", error);
+
+    match error {
+        aws_smithy_runtime_api::client::result::SdkError::ServiceError(service_err) => {
+            let code = service_err.err().code();
+            debug!("AWS error code: {:?}", code);
+            categorize_aws_error_code(code, message)
+        }
+        aws_smithy_runtime_api::client::result::SdkError::TimeoutError(_) => {
+            ProviderError::DeadlineExceeded(message)
+        }
+        aws_smithy_runtime_api::client::result::SdkError::DispatchFailure(_) => {
+            ProviderError::Unavailable(message)
+        }
+        aws_smithy_runtime_api::client::result::SdkError::ResponseError(_) => {
+            ProviderError::Sdk(message)
+        }
+        aws_smithy_runtime_api::client::result::SdkError::ConstructionFailure(_) => {
+            ProviderError::Validation(message)
+        }
+        _ => ProviderError::Sdk(message),
+    }
+}
+"#.to_string()),
             },
             Provider::Gcp => ProviderSdkConfig {
                 sdk_crate_pattern: "google-cloud-{service}".to_string(),
@@ -175,6 +264,9 @@ impl Provider {
                     config_var_name: "config_builder".to_string(),
                     loaded_config_var_name: "config".to_string(),
                 },
+                additional_dependencies: vec![],
+                error_metadata_import: None,
+                error_categorization_fn: None,
             },
             Provider::Azure => ProviderSdkConfig {
                 sdk_crate_pattern: "azure_sdk_{service}".to_string(),
@@ -205,6 +297,9 @@ impl Provider {
                     config_var_name: "credentials".to_string(),
                     loaded_config_var_name: "credentials".to_string(),
                 },
+                additional_dependencies: vec![],
+                error_metadata_import: None,
+                error_categorization_fn: None,
             },
             Provider::Kubernetes => ProviderSdkConfig {
                 sdk_crate_pattern: "kube".to_string(),
@@ -235,6 +330,9 @@ impl Provider {
                     config_var_name: "kube_config".to_string(),
                     loaded_config_var_name: "kube_config".to_string(),
                 },
+                additional_dependencies: vec![],
+                error_metadata_import: None,
+                error_categorization_fn: None,
             },
         }
     }

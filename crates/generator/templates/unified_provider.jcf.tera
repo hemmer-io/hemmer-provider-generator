@@ -10,51 +10,17 @@ provider = (
 
     # Provider configuration schema
     config: (
-{% if provider == "Aws" %}
-        region: (
+{% for attr in sdk_config.config_attrs %}
+        {{ attr.name }}: (
             type: "string",
+{% if attr.required %}
+            required: true,
+{% else %}
             optional: true,
-            description: "AWS region to use",
-        ),
-        profile: (
-            type: "string",
-            optional: true,
-            description: "AWS profile to use",
-        ),
-{% elif provider == "Gcp" %}
-        project: (
-            type: "string",
-            optional: true,
-            description: "GCP project ID",
-        ),
-        region: (
-            type: "string",
-            optional: true,
-            description: "GCP region to use",
-        ),
-{% elif provider == "Azure" %}
-        subscription_id: (
-            type: "string",
-            optional: true,
-            description: "Azure subscription ID",
-        ),
-        tenant_id: (
-            type: "string",
-            optional: true,
-            description: "Azure tenant ID",
-        ),
-{% elif provider == "Kubernetes" %}
-        kubeconfig: (
-            type: "string",
-            optional: true,
-            description: "Path to kubeconfig file",
-        ),
-        context: (
-            type: "string",
-            optional: true,
-            description: "Kubernetes context to use",
-        ),
 {% endif %}
+            description: "{{ attr.description }}",
+        ),
+{% endfor %}
     ),
 
     # Services
