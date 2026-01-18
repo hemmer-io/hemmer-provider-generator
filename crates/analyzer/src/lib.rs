@@ -24,6 +24,7 @@ mod confidence;
 mod config_detector;
 mod crate_pattern_detector;
 mod error_detector;
+pub mod git_cloner;
 mod output;
 mod workspace_detector;
 
@@ -31,6 +32,7 @@ pub use analyzer::{
     AnalysisResult, AnalysisWarning, AnalyzedConfigAttr, AnalyzedMetadata, SdkAnalyzer,
 };
 pub use confidence::ConfidenceReport;
+pub use git_cloner::ClonedRepo;
 
 use thiserror::Error;
 
