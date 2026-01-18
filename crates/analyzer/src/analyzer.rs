@@ -39,6 +39,7 @@ pub struct SdkAnalyzer {
 }
 
 /// Complete analysis result
+#[derive(Debug)]
 pub struct AnalysisResult {
     /// Generated provider metadata
     pub metadata: AnalyzedMetadata,
@@ -375,6 +376,8 @@ impl AnalysisResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_automation_calculation() {
@@ -416,5 +419,53 @@ mod tests {
             w,
             AnalysisWarning::LowConfidence { field, .. } if field == "config_crate"
         )));
+    }
+
+    #[test]
+    fn test_empty_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let analyzer = SdkAnalyzer::new(temp_dir.path().to_path_buf(), "test".to_string());
+
+        // Should fail gracefully with NoSdkCrates error
+        let result = analyzer.analyze();
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), AnalyzerError::CargoMetadata(_)));
+    }
+
+    #[test]
+    fn test_single_crate_workspace() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create minimal Cargo.toml with SDK-like name
+        let cargo_toml = temp_dir.path().join("Cargo.toml");
+        fs::write(&cargo_toml, r#"
+[package]
+name = "test-sdk-service"
+version = "1.0.0"
+edition = "2021"
+"#).unwrap();
+
+        // Create empty src directory
+        fs::create_dir(temp_dir.path().join("src")).unwrap();
+        fs::write(temp_dir.path().join("src/lib.rs"), "// Empty").unwrap();
+
+        let analyzer = SdkAnalyzer::new(temp_dir.path().to_path_buf(), "test".to_string());
+
+        // Single crate without SDK prefix gets filtered out
+        let result = analyzer.analyze();
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), AnalyzerError::NoSdkCrates));
+    }
+
+    #[test]
+    fn test_nonexistent_path() {
+        let analyzer = SdkAnalyzer::new(
+            PathBuf::from("/nonexistent/path/that/does/not/exist"),
+            "test".to_string()
+        );
+
+        // Should fail with directory read error
+        let result = analyzer.analyze();
+        assert!(result.is_err());
     }
 }
