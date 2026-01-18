@@ -20,3 +20,6 @@ Thumbs.db
 # Generated files
 /output/
 /generated/
+
+# Claude Code
+.claude/
