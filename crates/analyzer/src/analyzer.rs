@@ -16,6 +16,7 @@ pub struct AnalyzedMetadata {
     pub client_type_pattern: String,
     pub config_crate: Option<String>,
     pub async_client: bool,
+    pub is_monolithic: bool,
     pub config_attrs: Vec<AnalyzedConfigAttr>,
     pub error_metadata_import: Option<String>,
     pub error_categorization: HashMap<String, Vec<String>>,
@@ -92,9 +93,28 @@ impl SdkAnalyzer {
 
         self.log(&format!("Identified {} SDK crates", sdk_crates.len()));
 
+        // Detect if this is a monolithic SDK (single client for all resources)
+        let is_monolithic = workspace.is_monolithic();
+        if is_monolithic {
+            self.log("Detected monolithic SDK (< 3 service crates)");
+        }
+
         // Phase 2: Detect crate pattern
         self.log("Detecting crate pattern...");
-        let crate_pattern = crate_pattern_detector::detect_pattern(&sdk_crates);
+        let crate_pattern = if is_monolithic {
+            // For monolithic SDKs, use the main client crate name directly
+            if let Some(main_crate) = workspace.main_client_crate() {
+                crate_pattern_detector::CratePattern {
+                    pattern: main_crate.name.clone(),
+                    confidence: 0.9,
+                    samples: vec![main_crate.name.clone()],
+                }
+            } else {
+                crate_pattern_detector::detect_pattern(&sdk_crates)
+            }
+        } else {
+            crate_pattern_detector::detect_pattern(&sdk_crates)
+        };
         self.log(&format!(
             "Pattern: {} (confidence: {:.2})",
             crate_pattern.pattern, crate_pattern.confidence
@@ -171,6 +191,7 @@ impl SdkAnalyzer {
             client_type_pattern: client_pattern.pattern.clone(),
             config_crate: config_info.config_crate.clone(),
             async_client: config_info.async_client,
+            is_monolithic,
             config_attrs,
             error_metadata_import: error_info.metadata_import.clone(),
             error_categorization: error_info.categorization.clone(),
@@ -339,6 +360,7 @@ mod tests {
                 client_type_pattern: "aws_sdk_{service}::Client".to_string(),
                 config_crate: Some("aws-config".to_string()),
                 async_client: true,
+                is_monolithic: false,
                 config_attrs: vec![],
                 error_metadata_import: None,
                 error_categorization: HashMap::new(),

@@ -57,28 +57,80 @@ impl WorkspaceInfo {
     }
 
     /// Filter packages to likely SDK service crates
-    /// Excludes: examples, tests, tools, config crates, build scripts, infrastructure crates
+    /// Uses positive pattern matching for known SDK prefixes, then excludes infrastructure
     pub fn sdk_crates(&self) -> Vec<&PackageInfo> {
         self.packages
             .iter()
             .filter(|p| {
                 let name = p.name.as_str();
-                // Exclude common non-SDK patterns
-                !name.contains("example")
-                    && !name.contains("test")
-                    && !name.contains("tool")
-                    && !name.ends_with("-config")
-                    && !name.ends_with("-types")
-                    && !name.ends_with("-macro")
-                    && !name.contains("codegen")
-                    // Exclude infrastructure crates (AWS, GCP, etc.)
-                    && !name.contains("smithy")      // aws-smithy-*
-                    && !name.contains("runtime")     // aws-runtime, gcp-runtime, etc.
-                    && !name.contains("credential")  // aws-credential-types
-                    && !name.contains("sigv4")       // aws-sigv4
-                    && !name.contains("auth")        // auth libraries
+
+                // First, check if it matches known SDK service patterns (positive matching)
+                let matches_sdk_pattern = name.starts_with("aws-sdk-")
+                    || name.starts_with("google-cloud-")
+                    || name.starts_with("azure-sdk-")
+                    || name.starts_with("gcp-sdk-");
+
+                // For known patterns, only exclude if it's clearly infrastructure
+                if matches_sdk_pattern {
+                    return !Self::is_infrastructure_crate(name);
+                }
+
+                // For other crates, apply standard filtering
+                !Self::is_non_sdk_crate(name) && !Self::is_infrastructure_crate(name)
             })
             .collect()
+    }
+
+    /// Check if crate name indicates a non-SDK crate (examples, tests, tools)
+    fn is_non_sdk_crate(name: &str) -> bool {
+        name.contains("example")
+            || name.contains("test")
+            || name.contains("tool")
+            || name.contains("codegen")
+            || name.ends_with("-macro")
+    }
+
+    /// Check if crate is infrastructure/support library rather than service crate
+    fn is_infrastructure_crate(name: &str) -> bool {
+        // Common infrastructure suffixes
+        if name.ends_with("-config")
+            || name.ends_with("-types")
+            || name.ends_with("-core")
+            || name.ends_with("-derive")
+        {
+            return true;
+        }
+
+        // Filter out generated crates with version suffixes (e.g., google-cloud-language-v2)
+        // Check for pattern like -v1, -v2, -v1alpha, etc.
+        if let Some(dash_pos) = name.rfind("-v") {
+            let version_part = &name[dash_pos + 2..];
+            if version_part.chars().next().map(|c| c.is_numeric()).unwrap_or(false) {
+                return true;
+            }
+        }
+
+        // Common infrastructure components
+        let infra_components = [
+            "smithy",      // aws-smithy-*
+            "runtime",     // aws-runtime, kube-runtime
+            "credential",  // aws-credential-types
+            "sigv4",       // aws-sigv4
+            "auth",        // google-cloud-auth
+            "base",        // google-cloud-base
+            "gax",         // google-cloud-gax (Google API Extensions)
+            "internal",    // gax-internal
+            "lro",         // Long-running operations
+            "wkt",         // Well-known types
+            "util",        // test-utils, utilities
+            "generated",   // Generated code directories
+            "guide",       // Documentation/guides
+            "integration", // Integration tests
+            "root",        // Root/meta crates
+            "validation",  // Validation helpers
+        ];
+
+        infra_components.iter().any(|component| name.contains(component))
     }
 
     /// Find config crate if it exists
@@ -86,6 +138,27 @@ impl WorkspaceInfo {
         self.packages
             .iter()
             .find(|p| p.name.ends_with("-config") || p.name.contains("config"))
+    }
+
+    /// Detect if this is a monolithic SDK (single client for all resources)
+    /// Returns true if < 3 service crates found (e.g., Kubernetes has kube-client)
+    pub fn is_monolithic(&self) -> bool {
+        self.sdk_crates().len() < 3
+    }
+
+    /// Get the main client crate for monolithic SDKs
+    pub fn main_client_crate(&self) -> Option<&PackageInfo> {
+        let sdk_crates = self.sdk_crates();
+        if sdk_crates.len() == 1 {
+            Some(sdk_crates[0])
+        } else {
+            // Look for crates with "client" in the name
+            sdk_crates
+                .iter()
+                .find(|p| p.name.contains("client"))
+                .copied()
+                .or_else(|| sdk_crates.first().copied())
+        }
     }
 }
 

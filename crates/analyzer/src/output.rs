@@ -107,6 +107,13 @@ fn write_sdk_section(output: &mut String, result: &AnalysisResult) -> Result<()>
     writeln!(output, "  async_client: {}", result.metadata.async_client)?;
     writeln!(output)?;
 
+    // Shared client for monolithic SDKs
+    if result.metadata.is_monolithic {
+        writeln!(output, "  # Monolithic SDK detected - uses single client for all resources")?;
+        writeln!(output, "  uses_shared_client: true")?;
+        writeln!(output)?;
+    }
+
     // Dependencies (placeholder)
     writeln!(output, "  # TODO: Add SDK dependencies")?;
     writeln!(output, "  dependencies:")?;
@@ -249,6 +256,7 @@ mod tests {
                 client_type_pattern: "aws_sdk_{service}::Client".to_string(),
                 config_crate: Some("aws-config".to_string()),
                 async_client: true,
+                is_monolithic: false,
                 config_attrs: vec![],
                 error_metadata_import: None,
                 error_categorization: HashMap::new(),

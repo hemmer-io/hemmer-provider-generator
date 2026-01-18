@@ -25,8 +25,9 @@ pub struct ClientPattern {
 pub fn detect_pattern(repo_path: &Path, crates: &[&PackageInfo]) -> Result<ClientPattern> {
     let mut found_clients = Vec::new();
 
-    // Analyze first few crates (limit to 5 for performance)
-    for pkg in crates.iter().take(5) {
+    // Analyze first 15 crates for better pattern confidence
+    // (increased from 5 to improve detection accuracy)
+    for pkg in crates.iter().take(15) {
         if let Some(clients) = find_clients_in_package(repo_path, pkg)? {
             found_clients.extend(clients);
         }
@@ -191,7 +192,7 @@ fn calculate_client_confidence(clients: &[String], crates: &[&PackageInfo]) -> f
     }
 
     let analyzed = clients.len();
-    let total = crates.len().min(5); // We only analyze first 5
+    let total = crates.len().min(15); // We analyze first 15 crates
 
     let coverage = analyzed as f32 / total as f32;
 
