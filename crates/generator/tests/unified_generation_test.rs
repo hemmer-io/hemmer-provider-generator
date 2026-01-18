@@ -229,7 +229,7 @@ fn test_generate_unified_aws_provider() {
     assert!(cargo_toml_content.contains("hemmer-aws-provider"));
     assert!(cargo_toml_content.contains("aws-sdk-s3"));
     assert!(cargo_toml_content.contains("aws-sdk-dynamodb"));
-    assert!(cargo_toml_content.contains("hemmer-provider-sdk = \"0.3\""));
+    assert!(cargo_toml_content.contains("hemmer-provider-sdk = \"0.3.1\""));
     assert!(cargo_toml_content.contains("[[bin]]"));
 
     // Verify content of main.rs

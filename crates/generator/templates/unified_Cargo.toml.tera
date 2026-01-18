@@ -13,8 +13,8 @@ name = "hemmer-{{ provider_name }}-provider"
 path = "src/main.rs"
 
 [dependencies]
-# Hemmer provider SDK (0.3+ required for ProviderError variants)
-hemmer-provider-sdk = "0.3"
+# Hemmer provider SDK (0.3.1+ required for updated ProviderService signatures)
+hemmer-provider-sdk = "0.3.1"
 
 # Cloud SDK dependencies
 {% if provider == "Kubernetes" %}# Kubernetes SDK dependencies (special case - uses shared kube client)
