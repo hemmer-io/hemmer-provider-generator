@@ -1,3 +1,8 @@
+# SDK Analysis Result
+# Generated: 2026-01-18T18:23:17Z
+# Overall Confidence: 0.82 (HIGH)
+# Analyzer Version: 0.3.5
+
 version: 1
 
 provider:
@@ -5,17 +10,26 @@ provider:
   display_name: Amazon Web Services
 
 sdk:
+  # Confidence: 1.00 (HIGH)
   crate_pattern: "aws-sdk-{service}"
+
+  # Confidence: 0.95 (HIGH)
   client_type_pattern: "aws_sdk_{service}::Client"
+
+  # Confidence: 0.95 (HIGH)
   config_crate: aws-config
+
   async_client: true
+
   region_attr: region
+
   dependencies:
     - "aws-config = \"1\""
     - "aws-smithy-types = \"1\""
     - "aws-smithy-runtime-api = \"1\""
 
 config:
+  # Confidence: 0.70 (MEDIUM) - Review and customize
   initialization:
     snippet: "aws_config::from_env()"
     var_name: config_loader
@@ -73,10 +87,7 @@ errors:
     failed_precondition:
       - "*NotEmpty"
       - "*InUse"
-      - "*Conflict"
-      - "OperationAborted"
-      - "PreconditionFailed"
-      - "ConditionalCheckFailedException"
+      - "*NotReady"
 
     resource_exhausted:
       - "*LimitExceeded"
@@ -97,7 +108,3 @@ errors:
       - "RequestTimeout"
       - "RequestExpired"
       - "*Timeout"
-
-    unimplemented:
-      - "NotImplemented"
-      - "UnsupportedOperation"

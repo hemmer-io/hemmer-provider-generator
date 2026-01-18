@@ -20,6 +20,7 @@ path = "src/main.rs"
 hemmer-provider-generator-common = { version = "0.3.5", path = "../common" }
 hemmer-provider-generator-parser = { version = "0.3.5", path = "../parser" }
 hemmer-provider-generator-generator = { version = "0.3.5", path = "../generator" }
+hemmer-provider-generator-analyzer = { version = "0.3.5", path = "../analyzer" }
 clap = { workspace = true }
 anyhow = { workspace = true }
 colored = { workspace = true }
