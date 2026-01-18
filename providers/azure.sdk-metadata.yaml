@@ -1,0 +1,41 @@
+version: 1
+
+provider:
+  name: azure
+  display_name: Microsoft Azure
+
+sdk:
+  crate_pattern: "azure_sdk_{service}"
+  client_type_pattern: "azure_sdk_{service}::Client"
+  config_crate: azure_identity
+  async_client: true
+  region_attr: location
+
+config:
+  initialization:
+    snippet: "azure_identity::DefaultAzureCredential::default()"
+    var_name: credentials
+
+  load:
+    snippet: "credentials"
+    var_name: credentials
+
+  client_from_config:
+    snippet: "{client_type}::new(Arc::new(credentials))"
+    var_name: client
+
+  attributes:
+    - name: subscription_id
+      description: Azure subscription ID
+      required: false
+      setter: "subscription_id = Some({value}.to_string())"
+      extractor: "as_str()"
+
+    - name: tenant_id
+      description: Azure tenant ID
+      required: false
+      setter: "tenant_id = Some({value}.to_string())"
+      extractor: "as_str()"
+
+errors:
+  categorization: {}
