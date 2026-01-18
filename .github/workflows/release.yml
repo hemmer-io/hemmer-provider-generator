@@ -112,6 +112,8 @@ jobs:
           sleep 30  # Wait for crates.io to process
           cd ../parser && cargo publish --allow-dirty
           sleep 30
+          cd ../analyzer && cargo publish --allow-dirty
+          sleep 30
           cd ../generator && cargo publish --allow-dirty
           sleep 30
           cd ../cli && cargo publish --allow-dirty
