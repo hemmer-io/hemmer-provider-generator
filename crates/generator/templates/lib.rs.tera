@@ -9,9 +9,8 @@ pub mod resources;
 
 use hemmer_provider_sdk::{
     async_trait, serde_json, tonic,
-    ProviderService, ProviderSchema, Schema, Block, BlockType, NestingMode, Attribute, AttributeType, AttributeFlags,
-    PlanResult, AttributeChange, ImportedResource, ProviderMetadata, ServerCapabilities,
-    schema::Diagnostic,
+    ProviderService, ProviderSchema, PlanResult, AttributeChange, ImportedResource, ProviderMetadata, ServerCapabilities,
+    schema::{Schema, Block, BlockType, NestingMode, Attribute, AttributeType, AttributeFlags, Diagnostic},
     // Protocol versioning - re-export for visibility
     PROTOCOL_VERSION, MIN_PROTOCOL_VERSION, check_protocol_version,
 };
@@ -30,7 +29,7 @@ use hemmer_provider_sdk::ProviderError;
 
 {% if provider == "Aws" %}
 // AWS SDK error handling
-use {{ provider | config_crate(service_name=service_name) }}::error::ProvideErrorMetadata;
+use aws_smithy_types::error::metadata::ProvideErrorMetadata;
 
 /// Categorize AWS SDK error codes and convert to ProviderError
 fn categorize_aws_error_code(code: Option<&str>, message: String) -> ProviderError {

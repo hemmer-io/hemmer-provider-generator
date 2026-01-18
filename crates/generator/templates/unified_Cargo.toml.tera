@@ -25,6 +25,8 @@ k8s-openapi = { version = "0.20", features = ["v1_28"] }
 {%- if dep != "" %}{{ dep }} = "1"
 {% endif -%}
 {%- endfor %}{% if provider == "Aws" %}aws-config = "1"
+aws-smithy-types = "1"
+aws-smithy-runtime-api = "1"
 {% endif %}{% endif %}
 
 # Standard dependencies

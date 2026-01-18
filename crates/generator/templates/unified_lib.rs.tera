@@ -13,9 +13,8 @@
 {% endfor %}
 
 use hemmer_provider_sdk::{
-    Attribute, AttributeFlags, AttributeType, Block, BlockType, NestingMode, PlanResult, ProviderSchema, ProviderService,
-    Schema, ProviderError, ImportedResource,
-    schema::Diagnostic,
+    PlanResult, ProviderSchema, ProviderService, ProviderError, ImportedResource,
+    schema::{Attribute, AttributeFlags, AttributeType, Block, BlockType, NestingMode, Schema, Diagnostic},
     // Protocol versioning - re-export for visibility
     PROTOCOL_VERSION, MIN_PROTOCOL_VERSION, check_protocol_version,
 };

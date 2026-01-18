@@ -285,4 +285,8 @@ fn test_generate_s3_provider() {
     );
 
     println!("✅ Provider generated successfully to: {:?}", output_path);
+
+    // Note: Full compilation testing requires realistic service definitions
+    // See issue #91 for comprehensive integration testing
+    println!("✅ Generated code structure verified (full compilation testing in #91)");
 }

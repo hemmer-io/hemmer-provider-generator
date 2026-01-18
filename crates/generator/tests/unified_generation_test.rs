@@ -249,6 +249,10 @@ fn test_generate_unified_aws_provider() {
     assert!(lib_rs_content.contains("PROTOCOL_VERSION"));
     assert!(lib_rs_content.contains("SDK_PROTOCOL_VERSION"));
 
+    // Note: Full compilation testing requires realistic service definitions
+    // See issue #91 for comprehensive integration testing
+    println!("✅ Generated unified code structure verified (full compilation testing in #91)");
+
     // Clean up
     fs::remove_dir_all(&output_dir).expect("Failed to clean up test directory");
 }
