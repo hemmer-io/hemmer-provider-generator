@@ -122,8 +122,14 @@ fn find_common_suffix(strings: &[String]) -> String {
         }
     }
 
-    first.chars().rev().take(suffix_len).collect::<String>()
-        .chars().rev().collect()
+    first
+        .chars()
+        .rev()
+        .take(suffix_len)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect()
 }
 
 /// Calculate confidence score for pattern match

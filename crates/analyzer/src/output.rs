@@ -1,10 +1,6 @@
 //! YAML output generation with confidence annotations
 
-use crate::{
-    analyzer::AnalysisResult,
-    confidence::ConfidenceReport,
-    Result,
-};
+use crate::{analyzer::AnalysisResult, confidence::ConfidenceReport, Result};
 use chrono::Utc;
 use std::fmt::Write as FmtWrite;
 
@@ -40,7 +36,11 @@ fn write_header(output: &mut String, confidence: &ConfidenceReport) -> Result<()
 
     writeln!(output, "# SDK Analysis Result")?;
     writeln!(output, "# Generated: {timestamp}")?;
-    writeln!(output, "# Overall Confidence: {:.2} ({level})", confidence.overall)?;
+    writeln!(
+        output,
+        "# Overall Confidence: {:.2} ({level})",
+        confidence.overall
+    )?;
     writeln!(output, "# Analyzer Version: 0.3.5")?;
     writeln!(output)?;
 
@@ -50,8 +50,11 @@ fn write_header(output: &mut String, confidence: &ConfidenceReport) -> Result<()
 fn write_provider_section(output: &mut String, result: &AnalysisResult) -> Result<()> {
     writeln!(output, "provider:")?;
     writeln!(output, "  name: {}", result.metadata.provider_name)?;
-    writeln!(output, "  display_name: {}  # TODO: Update display name",
-        capitalize(&result.metadata.provider_name))?;
+    writeln!(
+        output,
+        "  display_name: {}  # TODO: Update display name",
+        capitalize(&result.metadata.provider_name)
+    )?;
     writeln!(output)?;
 
     Ok(())
@@ -109,7 +112,10 @@ fn write_sdk_section(output: &mut String, result: &AnalysisResult) -> Result<()>
 
     // Shared client for monolithic SDKs
     if result.metadata.is_monolithic {
-        writeln!(output, "  # Monolithic SDK detected - uses single client for all resources")?;
+        writeln!(
+            output,
+            "  # Monolithic SDK detected - uses single client for all resources"
+        )?;
         writeln!(output, "  uses_shared_client: true")?;
         writeln!(output)?;
     }
@@ -142,7 +148,10 @@ fn write_config_section(output: &mut String, result: &AnalysisResult) -> Result<
         let init_pattern = config_crate.replace("-config", "");
         writeln!(output, "    snippet: \"{init_pattern}_config::from_env()\"")?;
     } else {
-        writeln!(output, "    snippet: \"Config::from_env()\"  # TODO: Update")?;
+        writeln!(
+            output,
+            "    snippet: \"Config::from_env()\"  # TODO: Update"
+        )?;
     }
     writeln!(output, "    var_name: config_loader")?;
     writeln!(output)?;
@@ -175,7 +184,10 @@ fn write_config_section(output: &mut String, result: &AnalysisResult) -> Result<
         writeln!(output, "  #   - name: region")?;
         writeln!(output, "  #     description: \"Region for requests\"")?;
         writeln!(output, "  #     required: false")?;
-        writeln!(output, "  #     setter: \"config_loader = config_loader.region({{value}})\"")?;
+        writeln!(
+            output,
+            "  #     setter: \"config_loader = config_loader.region({{value}})\""
+        )?;
         writeln!(output, "  #     extractor: \"as_str()\"")?;
     }
     writeln!(output)?;
@@ -199,7 +211,10 @@ fn write_errors_section(output: &mut String, result: &AnalysisResult) -> Result<
         writeln!(output, "  metadata_import: \"{import}\"")?;
     } else {
         writeln!(output, "  # TODO: Add error metadata import if applicable")?;
-        writeln!(output, "  # metadata_import: \"provider_types::error::metadata::ProvideErrorMetadata\"")?;
+        writeln!(
+            output,
+            "  # metadata_import: \"provider_types::error::metadata::ProvideErrorMetadata\""
+        )?;
     }
     writeln!(output)?;
 

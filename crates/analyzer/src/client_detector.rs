@@ -109,7 +109,7 @@ fn extract_client_from_item(item: &Item, pkg_name: &str) -> Option<String> {
                 let module = pkg_name.replace('-', "_");
                 return Some(format!("{module}::Client"));
             }
-        }
+        },
         Item::Mod(ItemMod {
             content: Some((_, items)),
             ..
@@ -120,8 +120,8 @@ fn extract_client_from_item(item: &Item, pkg_name: &str) -> Option<String> {
                     return Some(client);
                 }
             }
-        }
-        _ => {}
+        },
+        _ => {},
     }
 
     None
@@ -143,10 +143,8 @@ fn infer_client_pattern_from_names(crates: &[&PackageInfo]) -> ClientPattern {
     let module = first.replace('-', "_");
 
     ClientPattern {
-        pattern: format!("{module}::Client").replace(
-            &extract_service_from_name(first),
-            "{service}",
-        ),
+        pattern: format!("{module}::Client")
+            .replace(&extract_service_from_name(first), "{service}"),
         confidence: 0.5, // Medium-low confidence for inference
         samples: vec![format!("{module}::Client")],
         async_client: true,
@@ -155,10 +153,7 @@ fn infer_client_pattern_from_names(crates: &[&PackageInfo]) -> ClientPattern {
 
 /// Extract service name from crate name (e.g., "aws-sdk-s3" → "s3")
 fn extract_service_from_name(name: &str) -> String {
-    name.split('-')
-        .next_back()
-        .unwrap_or(name)
-        .to_string()
+    name.split('-').next_back().unwrap_or(name).to_string()
 }
 
 /// Generate client pattern from found client types

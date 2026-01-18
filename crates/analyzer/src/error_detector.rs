@@ -88,7 +88,12 @@ fn extract_error_variants(source: &str) -> Vec<String> {
 
     // Look for error enums
     for item in syntax_tree.items {
-        if let Item::Enum(ItemEnum { ident, variants: enum_variants, .. }) = item {
+        if let Item::Enum(ItemEnum {
+            ident,
+            variants: enum_variants,
+            ..
+        }) = item
+        {
             // Check if this looks like an error enum
             let ident_str = ident.to_string();
             if ident_str.contains("Error")
@@ -117,7 +122,13 @@ fn categorize_errors(variants: &[String]) -> HashMap<String, Vec<String>> {
         ),
         (
             "already_exists",
-            vec!["AlreadyExists", "ResourceExists*", "*AlreadyExists", "*InUse", "Conflict"],
+            vec![
+                "AlreadyExists",
+                "ResourceExists*",
+                "*AlreadyExists",
+                "*InUse",
+                "Conflict",
+            ],
         ),
         (
             "permission_denied",
@@ -225,7 +236,10 @@ fn calculate_error_confidence(
 fn detect_metadata_import(_repo_path: &Path, crate_name: &str) -> Result<Option<String>> {
     // Common patterns for error metadata
     let _patterns = [
-        format!("{}_types::error::metadata::ProvideErrorMetadata", crate_name.replace('-', "_")),
+        format!(
+            "{}_types::error::metadata::ProvideErrorMetadata",
+            crate_name.replace('-', "_")
+        ),
         "smithy_types::error::metadata::ProvideErrorMetadata".to_string(),
         "aws_smithy_types::error::metadata::ProvideErrorMetadata".to_string(),
     ];
@@ -243,7 +257,10 @@ mod tests {
     fn test_matches_pattern() {
         assert!(matches_any_pattern("NotFound", &["NotFound"]));
         assert!(matches_any_pattern("NoSuchBucket", &["NoSuch*"]));
-        assert!(matches_any_pattern("AccessUnauthorized", &["*Unauthorized"]));
+        assert!(matches_any_pattern(
+            "AccessUnauthorized",
+            &["*Unauthorized"]
+        ));
         assert!(matches_any_pattern("InvalidRequest", &["Invalid*"]));
         assert!(matches_any_pattern("LimitExceeded", &["*Limit*"]));
 
@@ -289,7 +306,10 @@ mod tests {
     fn test_error_confidence() {
         let mut categorization = HashMap::new();
         categorization.insert("not_found".to_string(), vec!["NotFound".to_string()]);
-        categorization.insert("permission_denied".to_string(), vec!["AccessDenied".to_string()]);
+        categorization.insert(
+            "permission_denied".to_string(),
+            vec!["AccessDenied".to_string()],
+        );
 
         let all_variants = vec!["NotFound".to_string(), "AccessDenied".to_string()];
 

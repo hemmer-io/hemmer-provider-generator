@@ -984,7 +984,10 @@ fn analyze_sdk_command(
 
     // Parse service filter if provided
     let service_filter_list = service_filter.map(|filter| {
-        filter.split(',').map(|s| s.trim().to_string()).collect::<Vec<_>>()
+        filter
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .collect::<Vec<_>>()
     });
 
     if let Some(ref filters) = service_filter_list {
@@ -992,8 +995,7 @@ fn analyze_sdk_command(
     }
 
     // Create analyzer
-    let mut analyzer = SdkAnalyzer::new(sdk_path.to_path_buf(), name.to_string())
-        .verbose(verbose);
+    let mut analyzer = SdkAnalyzer::new(sdk_path.to_path_buf(), name.to_string()).verbose(verbose);
 
     if let Some(filters) = service_filter_list {
         analyzer = analyzer.with_service_filter(filters);

@@ -79,7 +79,7 @@ impl WorkspaceInfo {
                             || name == format!("aws-sdk-{}", filter)
                             || name == format!("azure-sdk-{}", filter)
                             || name == format!("gcp-sdk-{}", filter)
-                            || name == filter.as_str()  // Exact match for edge cases
+                            || name == filter.as_str() // Exact match for edge cases
                     });
                     if !matches_filter {
                         return false; // Skip crates not matching filter
@@ -127,39 +127,46 @@ impl WorkspaceInfo {
         // Check for pattern like -v1, -v2, -v1alpha, etc.
         if let Some(dash_pos) = name.rfind("-v") {
             let version_part = &name[dash_pos + 2..];
-            if version_part.chars().next().map(|c| c.is_numeric()).unwrap_or(false) {
+            if version_part
+                .chars()
+                .next()
+                .map(|c| c.is_numeric())
+                .unwrap_or(false)
+            {
                 return true;
             }
         }
 
         // Common infrastructure components
         let infra_components = [
-            "smithy",       // aws-smithy-*
-            "runtime",      // aws-runtime, kube-runtime
-            "credential",   // aws-credential-types
-            "sigv4",        // aws-sigv4
-            "auth",         // google-cloud-auth
-            "base",         // google-cloud-base
-            "gax",          // google-cloud-gax (Google API Extensions)
-            "internal",     // gax-internal
-            "lro",          // Long-running operations
-            "wkt",          // Well-known types
-            "util",         // test-utils, utilities
-            "generated",    // Generated code directories
-            "guide",        // Documentation/guides
-            "integration",  // Integration tests
-            "root",         // Root/meta crates
-            "validation",   // Validation helpers
-            "common",       // google-cloud-common (shared utilities)
-            "api",          // google-cloud-api (API helpers)
-            "rpc",          // google-cloud-rpc (RPC infrastructure)
-            "location",     // google-cloud-location (shared location types)
-            "longrunning",  // google-cloud-longrunning (LRO helpers)
-            "oslogin",      // google-cloud-oslogin-common
-            "-type",        // google-cloud-*-type (shared type definitions)
+            "smithy",      // aws-smithy-*
+            "runtime",     // aws-runtime, kube-runtime
+            "credential",  // aws-credential-types
+            "sigv4",       // aws-sigv4
+            "auth",        // google-cloud-auth
+            "base",        // google-cloud-base
+            "gax",         // google-cloud-gax (Google API Extensions)
+            "internal",    // gax-internal
+            "lro",         // Long-running operations
+            "wkt",         // Well-known types
+            "util",        // test-utils, utilities
+            "generated",   // Generated code directories
+            "guide",       // Documentation/guides
+            "integration", // Integration tests
+            "root",        // Root/meta crates
+            "validation",  // Validation helpers
+            "common",      // google-cloud-common (shared utilities)
+            "api",         // google-cloud-api (API helpers)
+            "rpc",         // google-cloud-rpc (RPC infrastructure)
+            "location",    // google-cloud-location (shared location types)
+            "longrunning", // google-cloud-longrunning (LRO helpers)
+            "oslogin",     // google-cloud-oslogin-common
+            "-type",       // google-cloud-*-type (shared type definitions)
         ];
 
-        infra_components.iter().any(|component| name.contains(component))
+        infra_components
+            .iter()
+            .any(|component| name.contains(component))
     }
 
     /// Find config crate if it exists

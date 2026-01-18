@@ -20,14 +20,16 @@
 
 mod analyzer;
 mod client_detector;
-mod config_detector;
 mod confidence;
+mod config_detector;
 mod crate_pattern_detector;
 mod error_detector;
 mod output;
 mod workspace_detector;
 
-pub use analyzer::{AnalysisResult, AnalysisWarning, AnalyzedConfigAttr, AnalyzedMetadata, SdkAnalyzer};
+pub use analyzer::{
+    AnalysisResult, AnalysisWarning, AnalyzedConfigAttr, AnalyzedMetadata, SdkAnalyzer,
+};
 pub use confidence::ConfidenceReport;
 
 use thiserror::Error;

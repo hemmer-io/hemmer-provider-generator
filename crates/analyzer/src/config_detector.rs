@@ -25,11 +25,7 @@ pub struct ConfigInfo {
 pub fn detect_config(repo_path: &Path, workspace: &WorkspaceInfo) -> Result<ConfigInfo> {
     // Find config crate
     let config_crate = workspace.config_crate().map(|p| p.name.clone());
-    let config_crate_confidence = if config_crate.is_some() {
-        0.95
-    } else {
-        0.0
-    };
+    let config_crate_confidence = if config_crate.is_some() { 0.95 } else { 0.0 };
 
     // Try to detect config attributes if config crate exists
     let (attributes, attributes_confidence) = if let Some(ref cfg_crate) = config_crate {
@@ -67,8 +63,7 @@ fn detect_config_attributes(
     ];
 
     // Search for builder patterns in config crate
-    if let Some(found_attrs) = search_for_builder_methods(repo_path, config_crate, &common_attrs)?
-    {
+    if let Some(found_attrs) = search_for_builder_methods(repo_path, config_crate, &common_attrs)? {
         attributes.extend(found_attrs);
     }
 

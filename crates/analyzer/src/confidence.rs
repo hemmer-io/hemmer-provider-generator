@@ -113,9 +113,18 @@ mod tests {
 
     #[test]
     fn test_confidence_levels() {
-        assert_eq!(ConfidenceReport::new(0.9, 0.9, 0.9, 0.9, 0.9).level(), "HIGH");
-        assert_eq!(ConfidenceReport::new(0.7, 0.7, 0.7, 0.7, 0.7).level(), "MEDIUM");
-        assert_eq!(ConfidenceReport::new(0.5, 0.5, 0.5, 0.5, 0.5).level(), "LOW");
+        assert_eq!(
+            ConfidenceReport::new(0.9, 0.9, 0.9, 0.9, 0.9).level(),
+            "HIGH"
+        );
+        assert_eq!(
+            ConfidenceReport::new(0.7, 0.7, 0.7, 0.7, 0.7).level(),
+            "MEDIUM"
+        );
+        assert_eq!(
+            ConfidenceReport::new(0.5, 0.5, 0.5, 0.5, 0.5).level(),
+            "LOW"
+        );
     }
 
     #[test]

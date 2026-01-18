@@ -1,7 +1,7 @@
 //! Core SDK analysis orchestration
 
 use crate::{
-    client_detector, config_detector, confidence::ConfidenceReport, crate_pattern_detector,
+    client_detector, confidence::ConfidenceReport, config_detector, crate_pattern_detector,
     error_detector, output, workspace_detector::WorkspaceInfo, AnalyzerError, Result,
 };
 use std::collections::HashMap;
@@ -117,7 +117,10 @@ impl SdkAnalyzer {
             return Err(AnalyzerError::NoSdkCrates);
         }
 
-        self.log(&format!("Identified {} SDK crates for analysis", sdk_crates.len()));
+        self.log(&format!(
+            "Identified {} SDK crates for analysis",
+            sdk_crates.len()
+        ));
 
         // Detect if this is a monolithic SDK (single client for all resources)
         let is_monolithic = workspace.is_monolithic();
@@ -148,8 +151,8 @@ impl SdkAnalyzer {
 
         // Phase 3: Detect client type pattern
         self.log("Detecting client type pattern...");
-        let client_pattern =
-            client_detector::detect_pattern(&self.repo_path, &sdk_crates).unwrap_or_else(|e| {
+        let client_pattern = client_detector::detect_pattern(&self.repo_path, &sdk_crates)
+            .unwrap_or_else(|e| {
                 self.log(&format!("Client detection warning: {e}"));
                 // Fallback to inference
                 client_detector::ClientPattern {
@@ -178,15 +181,14 @@ impl SdkAnalyzer {
         // Phase 5: Detect error categorization
         self.log("Detecting error patterns...");
         let error_info = if let Some(first_crate) = sdk_crates.first() {
-            error_detector::detect_errors(&self.repo_path, &first_crate.name)
-                .unwrap_or_else(|e| {
-                    self.log(&format!("Error detection warning: {e}"));
-                    error_detector::ErrorInfo {
-                        metadata_import: None,
-                        categorization: HashMap::new(),
-                        confidence: 0.3,
-                    }
-                })
+            error_detector::detect_errors(&self.repo_path, &first_crate.name).unwrap_or_else(|e| {
+                self.log(&format!("Error detection warning: {e}"));
+                error_detector::ErrorInfo {
+                    metadata_import: None,
+                    categorization: HashMap::new(),
+                    confidence: 0.3,
+                }
+            })
         } else {
             error_detector::ErrorInfo {
                 metadata_import: None,
@@ -310,13 +312,13 @@ impl AnalysisResult {
             match warning {
                 AnalysisWarning::LowConfidence { field, score } => {
                     eprintln!("  ⚠ {field}: Low confidence ({score:.2}) - needs review");
-                }
+                },
                 AnalysisWarning::NoPattern { field } => {
                     eprintln!("  ⚠ {field}: No pattern detected");
-                }
+                },
                 AnalysisWarning::RequiresReview { field, reason } => {
                     eprintln!("  ⚠ {field}: {reason}");
-                }
+                },
             }
         }
     }
@@ -324,17 +326,18 @@ impl AnalysisResult {
     /// Print summary to stderr
     pub fn print_summary(&self) {
         eprintln!("\n✓ Analysis complete");
-        eprintln!("  Overall confidence: {:.2} ({})",
+        eprintln!(
+            "  Overall confidence: {:.2} ({})",
             self.confidence.overall,
             self.confidence.level()
         );
-        eprintln!("  Crate pattern: {} ({:.2})",
-            self.metadata.sdk_crate_pattern,
-            self.confidence.crate_pattern
+        eprintln!(
+            "  Crate pattern: {} ({:.2})",
+            self.metadata.sdk_crate_pattern, self.confidence.crate_pattern
         );
-        eprintln!("  Client pattern: {} ({:.2})",
-            self.metadata.client_type_pattern,
-            self.confidence.client_type
+        eprintln!(
+            "  Client pattern: {} ({:.2})",
+            self.metadata.client_type_pattern, self.confidence.client_type
         );
 
         if let Some(ref config) = self.metadata.config_crate {
@@ -342,7 +345,8 @@ impl AnalysisResult {
         }
 
         let automation = self.calculate_automation_percentage();
-        eprintln!("\n  Automation: {automation}% ({}/9 fields)",
+        eprintln!(
+            "\n  Automation: {automation}% ({}/9 fields)",
             (automation as f32 / 100.0 * 9.0) as usize
         );
     }
@@ -429,7 +433,10 @@ mod tests {
         // Should fail gracefully with NoSdkCrates error
         let result = analyzer.analyze();
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), AnalyzerError::CargoMetadata(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            AnalyzerError::CargoMetadata(_)
+        ));
     }
 
     #[test]
@@ -438,12 +445,16 @@ mod tests {
 
         // Create minimal Cargo.toml with SDK-like name
         let cargo_toml = temp_dir.path().join("Cargo.toml");
-        fs::write(&cargo_toml, r#"
+        fs::write(
+            &cargo_toml,
+            r#"
 [package]
 name = "test-sdk-service"
 version = "1.0.0"
 edition = "2021"
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         // Create empty src directory
         fs::create_dir(temp_dir.path().join("src")).unwrap();
@@ -461,7 +472,7 @@ edition = "2021"
     fn test_nonexistent_path() {
         let analyzer = SdkAnalyzer::new(
             PathBuf::from("/nonexistent/path/that/does/not/exist"),
-            "test".to_string()
+            "test".to_string(),
         );
 
         // Should fail with directory read error
