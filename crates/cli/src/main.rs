@@ -193,7 +193,7 @@ fn main() -> Result<()> {
                 &version,
                 cli.verbose,
             )?;
-        }
+        },
         Commands::Generate {
             spec,
             format,
@@ -209,7 +209,7 @@ fn main() -> Result<()> {
                 output.as_path(),
                 cli.verbose,
             )?;
-        }
+        },
 
         Commands::GenerateUnified {
             provider,
@@ -232,7 +232,7 @@ fn main() -> Result<()> {
                 output: output.as_path(),
                 verbose: cli.verbose,
             })?;
-        }
+        },
     }
 
     Ok(())
@@ -277,19 +277,19 @@ fn parse_command(
             let parser = SmithyParser::from_file(spec_path, &service, version)
                 .context("Failed to load Smithy spec")?;
             parser.parse().context("Failed to parse Smithy spec")?
-        }
+        },
         SpecFormat::Openapi => {
             println!("{} Using OpenAPI parser", "→".cyan());
             let parser = OpenApiParser::from_file(spec_path, &service, version)
                 .context("Failed to load OpenAPI spec")?;
             parser.parse().context("Failed to parse OpenAPI spec")?
-        }
+        },
         SpecFormat::Discovery => {
             println!("{} Using Discovery parser", "→".cyan());
             let parser = DiscoveryParser::from_file(spec_path, &service, version)
                 .context("Failed to load Discovery doc")?;
             parser.parse().context("Failed to parse Discovery doc")?
-        }
+        },
         SpecFormat::Protobuf => {
             println!("{} Using Protobuf parser", "→".cyan());
             let parser = ProtobufParser::from_file(spec_path, &service, version)
@@ -297,7 +297,7 @@ fn parse_command(
             parser
                 .parse()
                 .context("Failed to parse Protobuf FileDescriptorSet")?
-        }
+        },
     };
 
     // Display results
@@ -374,24 +374,24 @@ fn generate_command(
             let parser = SmithyParser::from_file(spec_path, service_name, version)
                 .context("Failed to load Smithy spec")?;
             parser.parse().context("Failed to parse Smithy spec")?
-        }
+        },
         SpecFormat::Openapi => {
             let parser = OpenApiParser::from_file(spec_path, service_name, version)
                 .context("Failed to load OpenAPI spec")?;
             parser.parse().context("Failed to parse OpenAPI spec")?
-        }
+        },
         SpecFormat::Discovery => {
             let parser = DiscoveryParser::from_file(spec_path, service_name, version)
                 .context("Failed to load Discovery doc")?;
             parser.parse().context("Failed to parse Discovery doc")?
-        }
+        },
         SpecFormat::Protobuf => {
             let parser = ProtobufParser::from_file(spec_path, service_name, version)
                 .context("Failed to load Protobuf FileDescriptorSet")?;
             parser
                 .parse()
                 .context("Failed to parse Protobuf FileDescriptorSet")?
-        }
+        },
     };
 
     println!(
@@ -510,14 +510,14 @@ fn generate_unified_command(config: UnifiedConfig) -> Result<()> {
                             format!("Failed to load Smithy spec: {}", spec_path.display()),
                         )?;
                     parser.parse().context("Failed to parse Smithy spec")?
-                }
+                },
                 SpecFormat::Openapi => {
                     let parser =
                         OpenApiParser::from_file(spec_path, service_name, config.version).context(
                             format!("Failed to load OpenAPI spec: {}", spec_path.display()),
                         )?;
                     parser.parse().context("Failed to parse OpenAPI spec")?
-                }
+                },
                 SpecFormat::Discovery => {
                     let parser =
                         DiscoveryParser::from_file(spec_path, service_name, config.version)
@@ -526,7 +526,7 @@ fn generate_unified_command(config: UnifiedConfig) -> Result<()> {
                                 spec_path.display()
                             ))?;
                     parser.parse().context("Failed to parse Discovery doc")?
-                }
+                },
                 SpecFormat::Protobuf => {
                     let parser = ProtobufParser::from_file(spec_path, service_name, config.version)
                         .context(format!(
@@ -536,7 +536,7 @@ fn generate_unified_command(config: UnifiedConfig) -> Result<()> {
                     parser
                         .parse()
                         .context("Failed to parse Protobuf FileDescriptorSet")?
-                }
+                },
             };
             Ok(service_def)
         })();
@@ -560,11 +560,11 @@ fn generate_unified_command(config: UnifiedConfig) -> Result<()> {
                     );
                     services.push(service_def);
                 }
-            }
+            },
             Err(e) => {
                 eprintln!("{} Skipping {}: {}", "⚠".yellow(), spec_path.display(), e);
                 skipped += 1;
-            }
+            },
         }
     }
 

@@ -13,8 +13,8 @@
 {% endfor %}
 
 use hemmer_provider_sdk::{
-    Attribute, AttributeFlags, AttributeType, Block, BlockType, NestingMode, PlanResult, ProviderSchema, ProviderService,
-    Schema,
+    PlanResult, ProviderSchema, ProviderService, ProviderError, ImportedResource,
+    schema::{Attribute, AttributeFlags, AttributeType, Block, BlockType, NestingMode, Schema, Diagnostic},
     // Protocol versioning - re-export for visibility
     PROTOCOL_VERSION, MIN_PROTOCOL_VERSION, check_protocol_version,
 };
@@ -57,9 +57,9 @@ impl {{ provider_name | capitalize }}Provider {
 {% if provider | has_config_crate %}
 {% for service in services %}
     /// Get the {{ service.name }} client, returning an error if not configured
-    pub async fn get_{{ service.name }}_client(&self) -> Result<{{ provider | client_type(service_name=service.name) }}, String> {
+    pub async fn get_{{ service.name }}_client(&self) -> Result<{{ provider | client_type(service_name=service.name) }}, ProviderError> {
         let guard = self.{{ service.name }}_client.read().await;
-        guard.clone().ok_or_else(|| "Provider not configured. Call configure() first.".to_string())
+        guard.clone().ok_or_else(|| ProviderError::InvalidRequest("Provider not configured. Call configure() first.".to_string()))
     }
 {% endfor %}
 {% endif %}
@@ -206,7 +206,7 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         Self::build_schema()
     }
 
-    async fn configure(&self, config: serde_json::Value) -> Result<Vec<String>, String> {
+    async fn configure(&self, config: serde_json::Value) -> Result<Vec<Diagnostic>, ProviderError> {
         info!("Configuring {{ provider_name }} provider");
         debug!("Config: {:?}", config);
 
@@ -239,24 +239,25 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         Ok(vec![])
     }
 
-    fn plan(
+    async fn plan(
         &self,
         resource_type: &str,
         prior_state: Option<serde_json::Value>,
-        proposed: serde_json::Value,
-    ) -> Result<PlanResult, String> {
+        proposed_state: serde_json::Value,
+        config: serde_json::Value,
+    ) -> Result<PlanResult, ProviderError> {
         // Parse resource type: service_resource format
         let parts: Vec<&str> = resource_type.split('_').collect();
         if parts.len() < 2 {
-            return Err(format!("Invalid resource type: {}", resource_type));
+            return Err(ProviderError::Validation(format!("Invalid resource type: {}", resource_type)));
         }
 
         // Compute diff between prior and proposed states
-        let mut result = PlanResult::from_diff(prior_state.as_ref(), &proposed);
+        let mut result = PlanResult::from_diff(prior_state.as_ref(), &proposed_state);
 
         // Check if any immutable fields changed (requires resource replacement)
         if let Some(ref prior) = prior_state {
-            if self.has_immutable_field_changes(resource_type, prior, &proposed) {
+            if self.has_immutable_field_changes(resource_type, prior, &proposed_state) {
                 result.requires_replace = true;
             }
         }
@@ -303,14 +304,14 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
     async fn create(
         &self,
         resource_type: &str,
-        planned: serde_json::Value,
-    ) -> Result<serde_json::Value, String> {
+        planned_state: serde_json::Value,
+    ) -> Result<serde_json::Value, ProviderError> {
         info!("Creating {} resource", resource_type);
 
         // Parse resource type: service_resource format
         let parts: Vec<&str> = resource_type.split('_').collect();
         if parts.len() < 2 {
-            return Err(format!("Invalid resource type: {}", resource_type));
+            return Err(ProviderError::Validation(format!("Invalid resource type: {}", resource_type)));
         }
 
         let service_name = parts[0];
@@ -321,27 +322,27 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
             "{{ service.name }}" => {
 {% if provider | has_config_crate %}
                 let client = self.get_{{ service.name }}_client().await?;
-                {{ service.name }}::create_resource(&resource_name, client, planned).await
+                {{ service.name }}::create_resource(&resource_name, client, planned_state).await
 {% else %}
-                {{ service.name }}::create_resource(&resource_name, &self.config, planned).await
+                {{ service.name }}::create_resource(&resource_name, &self.config, planned_state).await
 {% endif %}
             }
 {% endfor %}
-            _ => Err(format!("Unknown service: {}", service_name)),
+            _ => Err(ProviderError::UnknownResource(format!("Unknown service: {}", service_name))),
         }
     }
 
     async fn read(
         &self,
         resource_type: &str,
-        current: serde_json::Value,
-    ) -> Result<serde_json::Value, String> {
+        current_state: serde_json::Value,
+    ) -> Result<serde_json::Value, ProviderError> {
         debug!("Reading {} resource", resource_type);
 
         // Parse resource type: service_resource format
         let parts: Vec<&str> = resource_type.split('_').collect();
         if parts.len() < 2 {
-            return Err(format!("Invalid resource type: {}", resource_type));
+            return Err(ProviderError::Validation(format!("Invalid resource type: {}", resource_type)));
         }
 
         let service_name = parts[0];
@@ -352,28 +353,28 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
             "{{ service.name }}" => {
 {% if provider | has_config_crate %}
                 let client = self.get_{{ service.name }}_client().await?;
-                {{ service.name }}::read_resource(&resource_name, client, current).await
+                {{ service.name }}::read_resource(&resource_name, client, current_state).await
 {% else %}
-                {{ service.name }}::read_resource(&resource_name, &self.config, current).await
+                {{ service.name }}::read_resource(&resource_name, &self.config, current_state).await
 {% endif %}
             }
 {% endfor %}
-            _ => Err(format!("Unknown service: {}", service_name)),
+            _ => Err(ProviderError::UnknownResource(format!("Unknown service: {}", service_name))),
         }
     }
 
     async fn update(
         &self,
         resource_type: &str,
-        _prior: serde_json::Value,
-        planned: serde_json::Value,
-    ) -> Result<serde_json::Value, String> {
+        prior_state: serde_json::Value,
+        planned_state: serde_json::Value,
+    ) -> Result<serde_json::Value, ProviderError> {
         info!("Updating {} resource", resource_type);
 
         // Parse resource type: service_resource format
         let parts: Vec<&str> = resource_type.split('_').collect();
         if parts.len() < 2 {
-            return Err(format!("Invalid resource type: {}", resource_type));
+            return Err(ProviderError::Validation(format!("Invalid resource type: {}", resource_type)));
         }
 
         let service_name = parts[0];
@@ -384,27 +385,27 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
             "{{ service.name }}" => {
 {% if provider | has_config_crate %}
                 let client = self.get_{{ service.name }}_client().await?;
-                {{ service.name }}::update_resource(&resource_name, client, planned).await
+                {{ service.name }}::update_resource(&resource_name, client, planned_state).await
 {% else %}
-                {{ service.name }}::update_resource(&resource_name, &self.config, planned).await
+                {{ service.name }}::update_resource(&resource_name, &self.config, planned_state).await
 {% endif %}
             }
 {% endfor %}
-            _ => Err(format!("Unknown service: {}", service_name)),
+            _ => Err(ProviderError::UnknownResource(format!("Unknown service: {}", service_name))),
         }
     }
 
     async fn delete(
         &self,
         resource_type: &str,
-        current: serde_json::Value,
-    ) -> Result<(), String> {
+        current_state: serde_json::Value,
+    ) -> Result<(), ProviderError> {
         info!("Deleting {} resource", resource_type);
 
         // Parse resource type: service_resource format
         let parts: Vec<&str> = resource_type.split('_').collect();
         if parts.len() < 2 {
-            return Err(format!("Invalid resource type: {}", resource_type));
+            return Err(ProviderError::Validation(format!("Invalid resource type: {}", resource_type)));
         }
 
         let service_name = parts[0];
@@ -415,13 +416,13 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
             "{{ service.name }}" => {
 {% if provider | has_config_crate %}
                 let client = self.get_{{ service.name }}_client().await?;
-                {{ service.name }}::delete_resource(&resource_name, client, current).await
+                {{ service.name }}::delete_resource(&resource_name, client, current_state).await
 {% else %}
-                {{ service.name }}::delete_resource(&resource_name, &self.config, current).await
+                {{ service.name }}::delete_resource(&resource_name, &self.config, current_state).await
 {% endif %}
             }
 {% endfor %}
-            _ => Err(format!("Unknown service: {}", service_name)),
+            _ => Err(ProviderError::UnknownResource(format!("Unknown service: {}", service_name))),
         }
     }
 
@@ -448,8 +449,7 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
 {% for service in services %}
             "{{ service.name }}" => {
 {% if provider | has_config_crate %}
-                let client = self.get_{{ service.name }}_client().await
-                    .map_err(|e| ProviderError::Configuration(e))?;
+                let client = self.get_{{ service.name }}_client().await?;
                 {{ service.name }}::import_resource(&resource_name, client, id).await
 {% else %}
                 {{ service.name }}::import_resource(&resource_name, &self.config, id).await
@@ -486,8 +486,7 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
 {% for service in services %}
             "{{ service.name }}" => {
 {% if provider | has_config_crate %}
-                let client = self.get_{{ service.name }}_client().await
-                    .map_err(|e| ProviderError::Configuration(e.to_string()))?;
+                let client = self.get_{{ service.name }}_client().await?;
                 {{ service.name }}::read_data_source(&ds_name, client, config).await
 {% else %}
                 {{ service.name }}::read_data_source(&ds_name, &self.config, config).await

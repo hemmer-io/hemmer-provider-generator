@@ -256,7 +256,7 @@ fn extract_fields_from_schema(
             } else {
                 return Ok(fields);
             }
-        }
+        },
     };
 
     // Extract properties
@@ -269,7 +269,7 @@ fn extract_fields_from_schema(
                 } else {
                     continue;
                 }
-            }
+            },
         };
 
         let field_type = convert_schema_to_field_type(spec, field_schema)?;
@@ -329,7 +329,7 @@ fn detect_nested_blocks_from_schema(
             } else {
                 return Ok(blocks);
             }
-        }
+        },
     };
 
     // Check each property for potential blocks
@@ -356,7 +356,7 @@ fn try_extract_block_from_property(
             } else {
                 return Ok(None);
             }
-        }
+        },
     };
 
     match schema.schema_type.as_deref() {
@@ -371,7 +371,7 @@ fn try_extract_block_from_property(
                         } else {
                             return Ok(None);
                         }
-                    }
+                    },
                 };
 
                 // Check if items are objects (not primitive types)
@@ -405,7 +405,7 @@ fn try_extract_block_from_property(
                     }));
                 }
             }
-        }
+        },
         // Single object → Single block
         Some("object") => {
             // Skip if this is a simple map (has additional_properties but no properties)
@@ -454,8 +454,8 @@ fn try_extract_block_from_property(
                     sdk_accessor_method,
                 }));
             }
-        }
-        _ => {}
+        },
+        _ => {},
     }
 
     Ok(None)
@@ -477,12 +477,12 @@ fn is_complex_schema(spec: &OpenApiSpec, schema: &Schema) -> bool {
                 } else {
                     continue;
                 }
-            }
+            },
         };
 
         match prop_schema.schema_type.as_deref() {
             Some("object") | Some("array") => return true,
-            _ => {}
+            _ => {},
         }
     }
 
@@ -505,7 +505,7 @@ fn extract_fields_from_schema_for_block(
                 } else {
                     continue;
                 }
-            }
+            },
         };
 
         // Skip complex nested structures (those will be blocks)
@@ -545,14 +545,14 @@ fn is_potential_block_property(spec: &OpenApiSpec, schema: &Schema) -> bool {
                         } else {
                             return false;
                         }
-                    }
+                    },
                 };
                 items_schema.schema_type.as_deref() == Some("object")
                     || items_schema.ref_path.is_some()
             } else {
                 false
             }
-        }
+        },
         // Complex objects (not simple maps)
         Some("object") => {
             if schema.additional_properties.is_some() && schema.properties.is_empty() {
@@ -560,7 +560,7 @@ fn is_potential_block_property(spec: &OpenApiSpec, schema: &Schema) -> bool {
             } else {
                 is_complex_schema(spec, schema)
             }
-        }
+        },
         _ => false,
     }
 }
@@ -593,13 +593,13 @@ fn convert_schema_to_field_type(spec: &OpenApiSpec, schema: &Schema) -> Result<F
                         } else {
                             FieldType::String
                         }
-                    }
+                    },
                 };
                 Ok(FieldType::List(Box::new(item_type)))
             } else {
                 Ok(FieldType::List(Box::new(FieldType::String)))
             }
-        }
+        },
         Some("object") => {
             if let Some(ref additional_props) = schema.additional_properties {
                 // This is a map
@@ -611,7 +611,7 @@ fn convert_schema_to_field_type(spec: &OpenApiSpec, schema: &Schema) -> Result<F
                         } else {
                             FieldType::String
                         }
-                    }
+                    },
                 };
                 Ok(FieldType::Map(
                     Box::new(FieldType::String),
@@ -620,7 +620,7 @@ fn convert_schema_to_field_type(spec: &OpenApiSpec, schema: &Schema) -> Result<F
             } else {
                 Ok(FieldType::String) // Complex object, default to string
             }
-        }
+        },
         _ => Ok(FieldType::String), // Default fallback
     }
 }

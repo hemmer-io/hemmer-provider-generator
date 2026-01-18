@@ -116,7 +116,7 @@ impl RustdocLoader {
                         .iter()
                         .filter_map(|field_id| Self::extract_field_definition(crate_data, field_id))
                         .collect();
-                }
+                },
                 _ => return vec![],
             }
         }
@@ -239,7 +239,7 @@ impl RustdocLoader {
 
                 // Map basic types
                 (crate::TypeMapper::map_type(type_name), true)
-            }
+            },
             Type::Primitive(prim) => (crate::TypeMapper::map_type(prim), true),
             _ => (FieldType::String, true), // Default fallback
         }

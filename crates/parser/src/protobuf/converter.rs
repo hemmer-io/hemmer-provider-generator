@@ -238,9 +238,9 @@ fn convert_protobuf_kind_to_field_type(_pool: &DescriptorPool, kind: &Kind) -> R
                     // Complex message - could recursively extract fields
                     // For now, treat as string (JSON representation)
                     FieldType::String
-                }
+                },
             }
-        }
+        },
         Kind::Enum(_) => FieldType::String, // Enums as strings
     })
 }

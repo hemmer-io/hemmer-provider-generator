@@ -466,7 +466,7 @@ impl FieldType {
             FieldType::List(inner) => format!("Vec<{}>", inner.to_rust_type()),
             FieldType::Map(k, v) => {
                 format!("HashMap<{}, {}>", k.to_rust_type(), v.to_rust_type())
-            }
+            },
             FieldType::Enum(_) => "String".to_string(),
             FieldType::DateTime => "String".to_string(),
             FieldType::Object(_) => "HashMap<String, serde_json::Value>".to_string(),
