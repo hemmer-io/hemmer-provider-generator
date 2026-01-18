@@ -8,7 +8,7 @@ repository.workspace = true
 description = "SDK analyzer for Hemmer Provider Generator - automatically generates provider metadata"
 
 [dependencies]
-hemmer-provider-generator-common = { version = "0.4.0", path = "../common" }
+hemmer-provider-generator-common = { version = "0.4.1", path = "../common" }
 
 # Cargo workspace analysis
 cargo_metadata = "0.18"
