@@ -87,11 +87,18 @@ hemmer-provider-generator/
 ├── scripts/
 │   ├── pre-commit                  # Pre-commit hook script
 │   └── install-hooks.sh            # Hook installation
+├── providers/                      # Provider SDK metadata (Phase 2)
+│   ├── README.md                   # Schema documentation
+│   ├── aws.sdk-metadata.yaml       # AWS configuration
+│   ├── gcp.sdk-metadata.yaml       # GCP configuration
+│   ├── azure.sdk-metadata.yaml     # Azure configuration
+│   └── kubernetes.sdk-metadata.yaml # Kubernetes configuration
 ├── crates/
 │   ├── common/                     # Shared types (IR, errors)
 │   │   ├── Cargo.toml
 │   │   └── src/
-│   │       └── lib.rs              # ServiceDefinition, FieldType, Provider, ProviderSdkConfig
+│   │       ├── lib.rs              # ServiceDefinition, FieldType, Provider, ProviderSdkConfig
+│   │       └── sdk_metadata.rs     # YAML metadata loader (Phase 2)
 │   ├── parser/                     # Spec format parsers
 │   │   ├── Cargo.toml
 │   │   └── src/
@@ -304,6 +311,170 @@ provider-{name}/
 | **Discovery** | GCP (REST APIs) | `crates/parser/src/discovery/` | ✅ |
 | **Protobuf** | gRPC services | `crates/parser/src/protobuf/` | ✅ |
 
+## Provider Configuration (Phase 2)
+
+**Status**: ✅ Complete
+
+Provider SDK configuration is now **externalized to YAML metadata files** in the `providers/` directory. This eliminates hardcoded provider logic in Rust and enables easy addition of new providers.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Provider Enum (lib.rs)                                      │
+│ ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
+│ │   Aws    │  │   Gcp    │  │  Azure   │  │ Custom() │    │
+│ └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘    │
+│      │             │              │             │          │
+└──────┼─────────────┼──────────────┼─────────────┼──────────┘
+       │             │              │             │
+       ▼             ▼              ▼             ▼
+┌────────────────────────────────────────────────────────────┐
+│ providers/ directory (YAML metadata files)                │
+│ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌──────┐ │
+│ │ aws.sdk-    │ │ gcp.sdk-    │ │ azure.sdk-  │ │ {name}│ │
+│ │ metadata    │ │ metadata    │ │ metadata    │ │ .sdk- │ │
+│ │ .yaml       │ │ .yaml       │ │ .yaml       │ │ meta  │ │
+│ └─────────────┘ └─────────────┘ └─────────────┘ └──────┘ │
+└────────────────────────────────────────────────────────────┘
+       │
+       ▼
+┌────────────────────────────────────────────────────────────┐
+│ ProviderSdkConfig (loaded dynamically)                    │
+│ - SDK crate patterns                                       │
+│ - Client type patterns                                     │
+│ - Configuration code generation                            │
+│ - Error categorization (auto-generated from YAML)          │
+└────────────────────────────────────────────────────────────┘
+```
+
+### Key Components
+
+1. **Provider Enum** (`crates/common/src/lib.rs`):
+   - Built-in variants: `Aws`, `Gcp`, `Azure`, `Kubernetes`
+   - Dynamic variant: `Custom(String)` for providers with metadata files
+   - `Provider::from_name()` - Create provider from string name
+   - `Provider::name()` - Get provider identifier
+   - `Provider::sdk_config()` - Load configuration from YAML
+
+2. **YAML Metadata Files** (`providers/*.sdk-metadata.yaml`):
+   - **Provider info**: Name and display name
+   - **SDK config**: Crate patterns, client types, dependencies
+   - **Config codegen**: Initialization, loading, client creation snippets
+   - **Config attributes**: Provider-specific settings (region, profile, etc.)
+   - **Error handling**: Metadata imports and categorization rules
+
+3. **Metadata Loader** (`crates/common/src/sdk_metadata.rs`):
+   - `ProviderSdkMetadata::load()` - Parse YAML file
+   - `to_provider_config()` - Convert to `ProviderSdkConfig`
+   - `ErrorInfo::generate_categorization_function()` - Generate error handling code
+
+### YAML Schema Example
+
+```yaml
+version: 1
+
+provider:
+  name: aws
+  display_name: Amazon Web Services
+
+sdk:
+  crate_pattern: "aws-sdk-{service}"
+  client_type_pattern: "aws_sdk_{service}::Client"
+  config_crate: aws-config
+  async_client: true
+  region_attr: region
+  dependencies:
+    - "aws-config = \"1\""
+    - "aws-smithy-types = \"1\""
+
+config:
+  initialization:
+    snippet: "aws_config::from_env()"
+    var_name: config_loader
+
+  load:
+    snippet: "config_loader.load().await"
+    var_name: sdk_config
+
+  client_from_config:
+    snippet: "{client_type}::new(&sdk_config)"
+    var_name: client
+
+  attributes:
+    - name: region
+      description: AWS region to use
+      required: false
+      setter: "config_loader = config_loader.region(...)"
+      extractor: "as_str()"
+
+errors:
+  metadata_import: "aws_smithy_types::error::metadata::ProvideErrorMetadata"
+  categorization:
+    not_found:
+      - "NotFound"
+      - "NoSuch*"        # Prefix wildcard
+      - "ResourceNotFoundException"
+    permission_denied:
+      - "AccessDenied"
+      - "*Unauthorized"  # Suffix wildcard
+```
+
+### Error Categorization
+
+Error categorization rules in YAML are automatically converted to Rust code:
+
+**YAML Pattern Types:**
+- **Exact match**: `"NotFound"` → `c == "NotFound"`
+- **Prefix wildcard**: `"NoSuch*"` → `c.starts_with("NoSuch")`
+- **Suffix wildcard**: `"*InUse"` → `c.ends_with("InUse")`
+- **Contains wildcard**: `"*Limit*"` → `c.contains("Limit")`
+
+**Supported Categories:**
+- `not_found` → `ProviderError::NotFound`
+- `already_exists` → `ProviderError::AlreadyExists`
+- `permission_denied` → `ProviderError::PermissionDenied`
+- `validation` → `ProviderError::Validation`
+- `failed_precondition` → `ProviderError::FailedPrecondition`
+- `resource_exhausted` → `ProviderError::ResourceExhausted`
+- `unavailable` → `ProviderError::Unavailable`
+- `deadline_exceeded` → `ProviderError::DeadlineExceeded`
+- `unimplemented` → `ProviderError::Unimplemented`
+
+### Adding a New Provider
+
+To add a new cloud provider:
+
+1. Create `providers/{name}.sdk-metadata.yaml` following the schema
+2. Define SDK patterns, configuration, and error handling
+3. The provider becomes available via `Provider::from_name("{name}")`
+4. No Rust code changes required!
+
+Example:
+```bash
+# Create metadata file
+cat > providers/digitalocean.sdk-metadata.yaml <<EOF
+version: 1
+provider:
+  name: digitalocean
+  display_name: DigitalOcean
+sdk:
+  crate_pattern: "digitalocean-sdk-{service}"
+  ...
+EOF
+
+# Provider is now available
+cargo run -- generate-unified --provider digitalocean ...
+```
+
+### Benefits
+
+- **Zero Rust code changes** to add/modify providers
+- **Easy maintenance** - update YAML files instead of Rust
+- **Error handling generation** - automatic from categorization rules
+- **Type safety** - validation at YAML load time
+- **Documentation** - YAML files are self-documenting
+
 ## Type System
 
 ### ServiceDefinition IR (Intermediate Representation)
@@ -344,6 +515,7 @@ pub enum Provider {
     Gcp,
     Azure,
     Kubernetes,
+    Custom(String),  // Dynamic provider loaded from YAML metadata
 }
 
 pub enum FieldType {
@@ -503,4 +675,4 @@ cargo run --bin hemmer-provider-generator -- --help
 
 ---
 
-**Last Updated**: 2025-11-29 (Phase 7 - gRPC Provider Protocol)
+**Last Updated**: 2026-01-18 (Phase 2 - SDK Metadata Files Complete, Phase 7 In Progress)

@@ -1,0 +1,103 @@
+version: 1
+
+provider:
+  name: aws
+  display_name: Amazon Web Services
+
+sdk:
+  crate_pattern: "aws-sdk-{service}"
+  client_type_pattern: "aws_sdk_{service}::Client"
+  config_crate: aws-config
+  async_client: true
+  region_attr: region
+  dependencies:
+    - "aws-config = \"1\""
+    - "aws-smithy-types = \"1\""
+    - "aws-smithy-runtime-api = \"1\""
+
+config:
+  initialization:
+    snippet: "aws_config::from_env()"
+    var_name: config_loader
+
+  load:
+    snippet: "config_loader.load().await"
+    var_name: sdk_config
+
+  client_from_config:
+    snippet: "{client_type}::new(&sdk_config)"
+    var_name: client
+
+  attributes:
+    - name: region
+      description: AWS region to use
+      required: false
+      setter: "config_loader = config_loader.region(aws_config::Region::new({value}.to_string()))"
+      extractor: "as_str()"
+
+    - name: profile
+      description: AWS profile to use
+      required: false
+      setter: "config_loader = config_loader.profile_name({value})"
+      extractor: "as_str()"
+
+errors:
+  metadata_import: "aws_smithy_types::error::metadata::ProvideErrorMetadata"
+  categorization:
+    not_found:
+      - "NotFound"
+      - "NoSuch*"
+      - "ResourceNotFoundException"
+
+    already_exists:
+      - "AlreadyExists"
+      - "AlreadyOwned"
+      - "EntityAlreadyExists"
+      - "DuplicateRequest"
+
+    permission_denied:
+      - "AccessDenied"
+      - "Unauthorized"
+      - "InvalidAccessKeyId"
+      - "SignatureDoesNotMatch"
+      - "ExpiredToken"
+      - "InvalidToken"
+
+    validation:
+      - "Invalid*"
+      - "Malformed*"
+      - "ValidationException"
+      - "ValidationError"
+      - "*ParameterValue"
+
+    failed_precondition:
+      - "*NotEmpty"
+      - "*InUse"
+      - "*Conflict"
+      - "OperationAborted"
+      - "PreconditionFailed"
+      - "ConditionalCheckFailedException"
+
+    resource_exhausted:
+      - "*LimitExceeded"
+      - "*TooMany"
+      - "SlowDown"
+      - "Throttling"
+      - "ThrottlingException"
+      - "ProvisionedThroughputExceededException"
+      - "RequestLimitExceeded"
+
+    unavailable:
+      - "ServiceUnavailable"
+      - "InternalError"
+      - "InternalFailure"
+      - "*ServiceException"
+
+    deadline_exceeded:
+      - "RequestTimeout"
+      - "RequestExpired"
+      - "*Timeout"
+
+    unimplemented:
+      - "NotImplemented"
+      - "UnsupportedOperation"

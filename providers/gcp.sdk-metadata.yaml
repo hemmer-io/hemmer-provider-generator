@@ -1,0 +1,40 @@
+version: 1
+
+provider:
+  name: gcp
+  display_name: Google Cloud Platform
+
+sdk:
+  crate_pattern: "google-cloud-{service}"
+  client_type_pattern: "google_cloud_{service}::Client"
+  async_client: true
+  region_attr: location
+
+config:
+  initialization:
+    snippet: "ClientConfig::default()"
+    var_name: config_builder
+
+  load:
+    snippet: "config_builder"
+    var_name: config
+
+  client_from_config:
+    snippet: "{client_type}::new(config).await.map_err(|e| tonic::Status::internal(format!(\"Failed to create GCP client: {}\", e)))?"
+    var_name: client
+
+  attributes:
+    - name: project
+      description: GCP project ID
+      required: false
+      setter: "config_builder = config_builder.with_project_id({value}.to_string())"
+      extractor: "as_str()"
+
+    - name: location
+      description: GCP location/region
+      required: false
+      setter: "// GCP location typically set per-request, not in config"
+      extractor: "as_str()"
+
+errors:
+  categorization: {}

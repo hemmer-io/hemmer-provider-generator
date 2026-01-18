@@ -1,0 +1,39 @@
+version: 1
+
+provider:
+  name: kubernetes
+  display_name: Kubernetes
+
+sdk:
+  crate_pattern: "kube"
+  client_type_pattern: "kube::Client"
+  async_client: true
+
+config:
+  initialization:
+    snippet: "kube::Config::infer().await.map_err(|e| tonic::Status::internal(format!(\"Failed to load kubeconfig: {}\", e)))?"
+    var_name: kube_config
+
+  load:
+    snippet: "kube_config"
+    var_name: kube_config
+
+  client_from_config:
+    snippet: "kube::Client::try_from(kube_config).map_err(|e| tonic::Status::internal(format!(\"Failed to create Kubernetes client: {}\", e)))?"
+    var_name: client
+
+  attributes:
+    - name: kubeconfig
+      description: Path to kubeconfig file
+      required: false
+      setter: "kubeconfig_path = Some({value}.to_string())"
+      extractor: "as_str()"
+
+    - name: context
+      description: Kubernetes context to use
+      required: false
+      setter: "context_name = Some({value}.to_string())"
+      extractor: "as_str()"
+
+errors:
+  categorization: {}

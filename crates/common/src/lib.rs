@@ -10,6 +10,8 @@
 //! 2. **Generator**: ServiceDefinition → Generated code (provider.k + Rust)
 //! 3. **Output**: Generated provider implementing ProviderExecutor trait
 
+pub mod sdk_metadata;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
@@ -34,12 +36,14 @@ pub enum GeneratorError {
 pub type Result<T> = std::result::Result<T, GeneratorError>;
 
 /// Represents a cloud provider type
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Provider {
     Aws,
     Gcp,
     Azure,
     Kubernetes,
+    /// Custom provider loaded from metadata file
+    Custom(String),
 }
 
 /// Provider-specific SDK configuration for code generation
@@ -122,219 +126,106 @@ pub struct ConfigCodegen {
 }
 
 impl Provider {
-    /// Get the SDK configuration for this provider
-    pub fn sdk_config(&self) -> ProviderSdkConfig {
+    /// Create a Provider from a name string
+    ///
+    /// For built-in providers (aws, gcp, azure, kubernetes), returns the corresponding enum variant.
+    /// For other names, attempts to load from metadata file at `providers/{name}.sdk-metadata.yaml`.
+    ///
+    /// # Arguments
+    /// * `name` - Provider name (e.g., "aws", "gcp", "my-custom-provider")
+    ///
+    /// # Returns
+    /// * `Ok(Provider)` if the provider is built-in or has a valid metadata file
+    /// * `Err(GeneratorError)` if the provider is unknown and has no metadata file
+    pub fn from_name(name: &str) -> Result<Self> {
+        match name {
+            "aws" => Ok(Provider::Aws),
+            "gcp" => Ok(Provider::Gcp),
+            "azure" => Ok(Provider::Azure),
+            "kubernetes" => Ok(Provider::Kubernetes),
+            // Dynamic loading for custom providers with metadata files
+            other => {
+                let metadata_path = format!("providers/{}.sdk-metadata.yaml", other);
+                if std::path::Path::new(&metadata_path).exists() {
+                    Ok(Provider::Custom(other.to_string()))
+                } else {
+                    Err(GeneratorError::Parse(format!(
+                        "Unknown provider '{}'. No metadata file found at {}",
+                        other, metadata_path
+                    )))
+                }
+            },
+        }
+    }
+
+    /// Get the provider name as a string
+    ///
+    /// # Returns
+    /// The provider identifier (e.g., "aws", "gcp", "my-custom-provider")
+    pub fn name(&self) -> &str {
         match self {
-            Provider::Aws => ProviderSdkConfig {
-                sdk_crate_pattern: "aws-sdk-{service}".to_string(),
-                client_type_pattern: "aws_sdk_{service}::Client".to_string(),
-                config_crate: Some("aws-config".to_string()),
-                async_client: true,
-                region_attr: Some("region".to_string()),
-                config_attrs: vec![
-                    ProviderConfigAttr {
-                        name: "region".to_string(),
-                        description: "AWS region to use".to_string(),
-                        required: false,
-                        setter_snippet: Some("config_loader = config_loader.region(aws_config::Region::new({value}.to_string()))".to_string()),
-                        value_extractor: Some("as_str()".to_string()),
-                    },
-                    ProviderConfigAttr {
-                        name: "profile".to_string(),
-                        description: "AWS profile to use".to_string(),
-                        required: false,
-                        setter_snippet: Some("config_loader = config_loader.profile_name({value})".to_string()),
-                        value_extractor: Some("as_str()".to_string()),
-                    },
-                ],
-                config_codegen: ConfigCodegen {
-                    init_snippet: "aws_config::from_env()".to_string(),
-                    load_snippet: "config_loader.load().await".to_string(),
-                    client_from_config: "{client_type}::new(&sdk_config)".to_string(),
-                    config_var_name: "config_loader".to_string(),
-                    loaded_config_var_name: "sdk_config".to_string(),
-                },
-                additional_dependencies: vec![
-                    "aws-config = \"1\"".to_string(),
-                    "aws-smithy-types = \"1\"".to_string(),
-                    "aws-smithy-runtime-api = \"1\"".to_string(),
-                ],
-                error_metadata_import: Some("aws_smithy_types::error::metadata::ProvideErrorMetadata".to_string()),
-                error_categorization_fn: Some(r#"
-/// Categorize AWS SDK error codes and convert to ProviderError
-fn categorize_aws_error_code(code: Option<&str>, message: String) -> ProviderError {
-    match code {
-        // Not Found errors
-        Some(c) if c.contains("NotFound") || c.contains("NoSuch") || c == "ResourceNotFoundException" => {
-            ProviderError::NotFound(message)
+            Provider::Aws => "aws",
+            Provider::Gcp => "gcp",
+            Provider::Azure => "azure",
+            Provider::Kubernetes => "kubernetes",
+            Provider::Custom(name) => name,
         }
-        // Already Exists errors
-        Some(c) if c.contains("AlreadyExists") || c.contains("AlreadyOwned") || c == "EntityAlreadyExists" || c == "DuplicateRequest" => {
-            ProviderError::AlreadyExists(message)
-        }
-        // Permission Denied errors
-        Some(c) if c.contains("AccessDenied") || c.contains("Unauthorized") || c == "InvalidAccessKeyId" || c == "SignatureDoesNotMatch" || c == "ExpiredToken" || c == "InvalidToken" => {
-            ProviderError::PermissionDenied(message)
-        }
-        // Invalid Argument errors
-        Some(c) if c.contains("Invalid") || c.contains("Malformed") || c == "ValidationException" || c == "ValidationError" || c.contains("ParameterValue") => {
-            ProviderError::Validation(message)
-        }
-        // Failed Precondition errors
-        Some(c) if c.contains("NotEmpty") || c.contains("InUse") || c.contains("Conflict") || c == "OperationAborted" || c == "PreconditionFailed" || c == "ConditionalCheckFailedException" => {
-            ProviderError::FailedPrecondition(message)
-        }
-        // Resource Exhausted errors
-        Some(c) if c.contains("LimitExceeded") || c.contains("TooMany") || c == "SlowDown" || c == "Throttling" || c == "ThrottlingException" || c == "ProvisionedThroughputExceededException" || c == "RequestLimitExceeded" => {
-            ProviderError::ResourceExhausted(message)
-        }
-        // Unavailable errors
-        Some(c) if c == "ServiceUnavailable" || c == "InternalError" || c == "InternalFailure" || c.contains("ServiceException") => {
-            ProviderError::Unavailable(message)
-        }
-        // Deadline Exceeded errors
-        Some(c) if c == "RequestTimeout" || c == "RequestExpired" || c.contains("Timeout") => {
-            ProviderError::DeadlineExceeded(message)
-        }
-        // Unimplemented errors
-        Some(c) if c == "NotImplemented" || c == "UnsupportedOperation" => {
-            ProviderError::Unimplemented(message)
-        }
-        // Unknown/fallback
-        _ => ProviderError::Sdk(message),
     }
-}
 
-/// Convert AWS SDK error to ProviderError (which can be converted to tonic::Status)
-fn sdk_error_to_provider_error<E, R>(error: &aws_smithy_runtime_api::client::result::SdkError<E, R>) -> ProviderError
-where
-    E: std::fmt::Debug + ProvideErrorMetadata,
-{
-    let message = format!("{:?}", error);
+    /// Get the SDK configuration for this provider
+    ///
+    /// This method loads provider configuration from YAML metadata files in the `providers/` directory.
+    /// For built-in providers, it loads from `providers/{provider}.sdk-metadata.yaml`.
+    /// For custom providers, it loads from the path specified during creation.
+    ///
+    /// # Panics
+    /// Panics if the metadata file cannot be loaded or parsed. This is intentional as provider
+    /// configuration is required for code generation and should be validated at startup.
+    pub fn sdk_config(&self) -> ProviderSdkConfig {
+        let provider_name = self.name();
+        let metadata_filename = format!("{}.sdk-metadata.yaml", provider_name);
 
-    match error {
-        aws_smithy_runtime_api::client::result::SdkError::ServiceError(service_err) => {
-            let code = service_err.err().code();
-            debug!("AWS error code: {:?}", code);
-            categorize_aws_error_code(code, message)
+        // Try multiple paths to find the metadata file:
+        // 1. Workspace root (when running from workspace)
+        // 2. Two levels up from CARGO_MANIFEST_DIR (when running tests from crate)
+        let mut paths_to_try = vec![std::path::PathBuf::from("providers").join(&metadata_filename)];
+
+        // Add path relative to crate directory (for tests)
+        if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+            paths_to_try.push(
+                std::path::PathBuf::from(manifest_dir)
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .map(|p| p.join("providers").join(&metadata_filename))
+                    .expect("Failed to construct path from CARGO_MANIFEST_DIR"),
+            );
         }
-        aws_smithy_runtime_api::client::result::SdkError::TimeoutError(_) => {
-            ProviderError::DeadlineExceeded(message)
+
+        // Try each path until we find one that exists
+        for path in &paths_to_try {
+            if path.exists() {
+                return sdk_metadata::ProviderSdkMetadata::load(path)
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "Failed to load provider metadata for '{}' from {}: {}",
+                            provider_name,
+                            path.display(),
+                            e
+                        )
+                    })
+                    .to_provider_config();
+            }
         }
-        aws_smithy_runtime_api::client::result::SdkError::DispatchFailure(_) => {
-            ProviderError::Unavailable(message)
-        }
-        aws_smithy_runtime_api::client::result::SdkError::ResponseError(_) => {
-            ProviderError::Sdk(message)
-        }
-        aws_smithy_runtime_api::client::result::SdkError::ConstructionFailure(_) => {
-            ProviderError::Validation(message)
-        }
-        _ => ProviderError::Sdk(message),
-    }
-}
-"#.to_string()),
-            },
-            Provider::Gcp => ProviderSdkConfig {
-                sdk_crate_pattern: "google-cloud-{service}".to_string(),
-                client_type_pattern: "google_cloud_{service}::Client".to_string(),
-                config_crate: None,
-                async_client: true,
-                region_attr: Some("location".to_string()),
-                config_attrs: vec![
-                    ProviderConfigAttr {
-                        name: "project".to_string(),
-                        description: "GCP project ID".to_string(),
-                        required: false,
-                        setter_snippet: Some("config_builder = config_builder.with_project_id({value}.to_string())".to_string()),
-                        value_extractor: Some("as_str()".to_string()),
-                    },
-                    ProviderConfigAttr {
-                        name: "location".to_string(),
-                        description: "GCP location/region".to_string(),
-                        required: false,
-                        setter_snippet: Some("// GCP location typically set per-request, not in config".to_string()),
-                        value_extractor: Some("as_str()".to_string()),
-                    },
-                ],
-                config_codegen: ConfigCodegen {
-                    init_snippet: "ClientConfig::default()".to_string(),
-                    load_snippet: "config_builder".to_string(),
-                    client_from_config: "{client_type}::new(config).await.map_err(|e| tonic::Status::internal(format!(\"Failed to create GCP client: {}\", e)))?".to_string(),
-                    config_var_name: "config_builder".to_string(),
-                    loaded_config_var_name: "config".to_string(),
-                },
-                additional_dependencies: vec![],
-                error_metadata_import: None,
-                error_categorization_fn: None,
-            },
-            Provider::Azure => ProviderSdkConfig {
-                sdk_crate_pattern: "azure_sdk_{service}".to_string(),
-                client_type_pattern: "azure_sdk_{service}::Client".to_string(),
-                config_crate: Some("azure_identity".to_string()),
-                async_client: true,
-                region_attr: Some("location".to_string()),
-                config_attrs: vec![
-                    ProviderConfigAttr {
-                        name: "subscription_id".to_string(),
-                        description: "Azure subscription ID".to_string(),
-                        required: false,
-                        setter_snippet: Some("subscription_id = Some({value}.to_string())".to_string()),
-                        value_extractor: Some("as_str()".to_string()),
-                    },
-                    ProviderConfigAttr {
-                        name: "tenant_id".to_string(),
-                        description: "Azure tenant ID".to_string(),
-                        required: false,
-                        setter_snippet: Some("tenant_id = Some({value}.to_string())".to_string()),
-                        value_extractor: Some("as_str()".to_string()),
-                    },
-                ],
-                config_codegen: ConfigCodegen {
-                    init_snippet: "azure_identity::DefaultAzureCredential::default()".to_string(),
-                    load_snippet: "credentials".to_string(),
-                    client_from_config: "{client_type}::new(Arc::new(credentials))".to_string(),
-                    config_var_name: "credentials".to_string(),
-                    loaded_config_var_name: "credentials".to_string(),
-                },
-                additional_dependencies: vec![],
-                error_metadata_import: None,
-                error_categorization_fn: None,
-            },
-            Provider::Kubernetes => ProviderSdkConfig {
-                sdk_crate_pattern: "kube".to_string(),
-                client_type_pattern: "kube::Client".to_string(),
-                config_crate: None,
-                async_client: true,
-                region_attr: None,
-                config_attrs: vec![
-                    ProviderConfigAttr {
-                        name: "kubeconfig".to_string(),
-                        description: "Path to kubeconfig file".to_string(),
-                        required: false,
-                        setter_snippet: Some("kubeconfig_path = Some({value}.to_string())".to_string()),
-                        value_extractor: Some("as_str()".to_string()),
-                    },
-                    ProviderConfigAttr {
-                        name: "context".to_string(),
-                        description: "Kubernetes context to use".to_string(),
-                        required: false,
-                        setter_snippet: Some("context_name = Some({value}.to_string())".to_string()),
-                        value_extractor: Some("as_str()".to_string()),
-                    },
-                ],
-                config_codegen: ConfigCodegen {
-                    init_snippet: "kube::Config::infer().await.map_err(|e| tonic::Status::internal(format!(\"Failed to load kubeconfig: {}\", e)))?".to_string(),
-                    load_snippet: "kube_config".to_string(),
-                    client_from_config: "kube::Client::try_from(kube_config).map_err(|e| tonic::Status::internal(format!(\"Failed to create Kubernetes client: {}\", e)))?".to_string(),
-                    config_var_name: "kube_config".to_string(),
-                    loaded_config_var_name: "kube_config".to_string(),
-                },
-                additional_dependencies: vec![],
-                error_metadata_import: None,
-                error_categorization_fn: None,
-            },
-        }
+
+        panic!(
+            "Could not find provider metadata file {} in any of these locations: {}",
+            metadata_filename,
+            paths_to_try
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
 
     /// Get the SDK crate name for a specific service
@@ -354,7 +245,15 @@ where
     /// Check if this provider uses a shared client (like Kubernetes)
     /// vs per-service clients (like AWS)
     pub fn uses_shared_client(&self) -> bool {
-        matches!(self, Provider::Kubernetes)
+        match self {
+            Provider::Kubernetes => true,
+            Provider::Custom(_) => {
+                // Check if the SDK crate pattern contains {service}
+                // If it doesn't, it's a shared client like Kubernetes
+                !self.sdk_config().sdk_crate_pattern.contains("{service}")
+            },
+            _ => false,
+        }
     }
 }
 
@@ -1153,5 +1052,106 @@ mod tests {
         assert_eq!(sanitize_identifier_part("_test_"), "test");
         // Starts with digit
         assert_eq!(sanitize_identifier_part("2fa"), "_2fa");
+    }
+
+    #[test]
+    fn test_provider_from_name_builtin() {
+        assert_eq!(Provider::from_name("aws").unwrap(), Provider::Aws);
+        assert_eq!(Provider::from_name("gcp").unwrap(), Provider::Gcp);
+        assert_eq!(Provider::from_name("azure").unwrap(), Provider::Azure);
+        assert_eq!(
+            Provider::from_name("kubernetes").unwrap(),
+            Provider::Kubernetes
+        );
+    }
+
+    #[test]
+    fn test_provider_from_name_unknown() {
+        let result = Provider::from_name("nonexistent");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Unknown provider"));
+    }
+
+    #[test]
+    fn test_provider_name() {
+        assert_eq!(Provider::Aws.name(), "aws");
+        assert_eq!(Provider::Gcp.name(), "gcp");
+        assert_eq!(Provider::Azure.name(), "azure");
+        assert_eq!(Provider::Kubernetes.name(), "kubernetes");
+        assert_eq!(
+            Provider::Custom("my-provider".to_string()).name(),
+            "my-provider"
+        );
+    }
+
+    #[test]
+    fn test_provider_sdk_config_loads_from_yaml() {
+        // Test that all built-in providers can load their metadata files
+        let aws_config = Provider::Aws.sdk_config();
+        assert_eq!(aws_config.sdk_crate_pattern, "aws-sdk-{service}");
+        assert_eq!(aws_config.client_type_pattern, "aws_sdk_{service}::Client");
+        assert_eq!(aws_config.config_crate, Some("aws-config".to_string()));
+        assert!(aws_config.async_client);
+        assert_eq!(aws_config.region_attr, Some("region".to_string()));
+        assert_eq!(aws_config.additional_dependencies.len(), 3);
+        assert!(aws_config.error_metadata_import.is_some());
+        assert!(aws_config.error_categorization_fn.is_some());
+
+        let gcp_config = Provider::Gcp.sdk_config();
+        assert_eq!(gcp_config.sdk_crate_pattern, "google-cloud-{service}");
+        assert_eq!(
+            gcp_config.client_type_pattern,
+            "google_cloud_{service}::Client"
+        );
+        assert_eq!(gcp_config.config_crate, None);
+        assert!(gcp_config.async_client);
+        assert_eq!(gcp_config.region_attr, Some("location".to_string()));
+
+        let azure_config = Provider::Azure.sdk_config();
+        assert_eq!(azure_config.sdk_crate_pattern, "azure_sdk_{service}");
+        assert_eq!(
+            azure_config.config_crate,
+            Some("azure_identity".to_string())
+        );
+
+        let k8s_config = Provider::Kubernetes.sdk_config();
+        assert_eq!(k8s_config.sdk_crate_pattern, "kube");
+        assert_eq!(k8s_config.client_type_pattern, "kube::Client");
+        assert_eq!(k8s_config.region_attr, None);
+    }
+
+    #[test]
+    fn test_provider_uses_shared_client() {
+        assert!(!Provider::Aws.uses_shared_client());
+        assert!(!Provider::Gcp.uses_shared_client());
+        assert!(!Provider::Azure.uses_shared_client());
+        assert!(Provider::Kubernetes.uses_shared_client());
+    }
+
+    #[test]
+    fn test_aws_error_categorization_function_generated() {
+        let config = Provider::Aws.sdk_config();
+        let error_fn = config
+            .error_categorization_fn
+            .expect("AWS should have error categorization");
+
+        // Verify function contains expected patterns
+        assert!(error_fn.contains("categorize_error_code"));
+        assert!(error_fn.contains("NotFound"));
+        assert!(error_fn.contains("ProviderError::NotFound"));
+        assert!(error_fn.contains("AlreadyExists"));
+        assert!(error_fn.contains("ProviderError::AlreadyExists"));
+        assert!(error_fn.contains("PermissionDenied"));
+        assert!(error_fn.contains("sdk_error_to_provider_error"));
+
+        // Verify wildcard patterns are converted correctly from YAML:
+        // "NoSuch*" -> starts_with("NoSuch")
+        assert!(error_fn.contains("starts_with(\"NoSuch\")"));
+        // "*InUse" -> ends_with("InUse")
+        assert!(error_fn.contains("ends_with(\"InUse\")"));
+        // "*LimitExceeded" -> ends_with("LimitExceeded")
+        assert!(error_fn.contains("ends_with(\"LimitExceeded\")"));
+        // "Invalid*" -> starts_with("Invalid")
+        assert!(error_fn.contains("starts_with(\"Invalid\")"));
     }
 }
