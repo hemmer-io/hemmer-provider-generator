@@ -34,7 +34,7 @@ regex = "1.10"
 chrono = "0.4"
 
 # Git repository cloning (vendored to support cross-compilation)
-git2 = { version = "0.19", features = ["vendored-libgit2", "vendored-openssl"] }
+git2 = { version = "0.20", features = ["vendored-libgit2", "vendored-openssl"] }
 
 # Temporary directories for cloning
 tempfile = "3.0"
