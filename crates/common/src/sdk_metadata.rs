@@ -213,6 +213,7 @@ fn categorize_error_code(code: Option<&str>, message: String) -> ProviderError {
 fn sdk_error_to_provider_error<E, R>(error: &aws_smithy_runtime_api::client::result::SdkError<E, R>) -> ProviderError
 where
     E: std::fmt::Debug + ProvideErrorMetadata,
+    R: std::fmt::Debug,
 {{
     let message = format!("{{:?}}", error);
 

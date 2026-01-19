@@ -10,7 +10,7 @@ use hemmer_{{ service_name }}_provider::{{ service_name | capitalize }}Provider;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
-    hemmer_provider_sdk::init_logging_with_default();
+    hemmer_provider_sdk::init_logging_with_default("info");
 
     // Create and serve the provider
     let provider = {{ service_name | capitalize }}Provider::new();

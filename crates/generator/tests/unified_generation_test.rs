@@ -288,3 +288,135 @@ fn test_generate_unified_provider_with_empty_services() {
     // Clean up
     fs::remove_dir_all(&output_dir).expect("Failed to clean up test directory");
 }
+
+#[test]
+#[ignore] // Run with `cargo test -- --ignored` - takes longer due to compilation
+fn test_generated_unified_provider_compiles() {
+    use std::process::Command;
+    use tempfile::TempDir;
+
+    // Create a test ProviderDefinition with two services (realistic AWS SDK operations)
+    let s3_service = ServiceDefinition {
+        provider: Provider::Aws,
+        name: "s3".to_string(),
+        sdk_version: "1.0.0".to_string(),
+        data_sources: vec![],
+        resources: vec![ResourceDefinition {
+            name: "bucket".to_string(),
+            description: Some("S3 bucket resource".to_string()),
+            fields: vec![
+                FieldDefinition {
+                    name: "bucket".to_string(),
+                    field_type: FieldType::String,
+                    required: true,
+                    sensitive: false,
+                    immutable: true,
+                    description: Some("The name of the bucket".to_string()),
+                    response_accessor: None,
+                },
+            ],
+            outputs: vec![],  // Simplified - no outputs for basic compilation test
+            blocks: vec![],
+            id_field: None,
+            operations: Operations {
+                create: Some(OperationMapping {
+                    sdk_operation: "create_bucket".to_string(),
+                    additional_operations: vec![],
+                }),
+                read: Some(OperationMapping {
+                    sdk_operation: "head_bucket".to_string(),
+                    additional_operations: vec![],
+                }),
+                update: None, // S3 buckets don't have a simple update operation
+                delete: Some(OperationMapping {
+                    sdk_operation: "delete_bucket".to_string(),
+                    additional_operations: vec![],
+                }),
+                import: None,
+            },
+        }],
+    };
+
+    let dynamodb_service = ServiceDefinition {
+        provider: Provider::Aws,
+        name: "dynamodb".to_string(),
+        sdk_version: "1.0.0".to_string(),
+        data_sources: vec![],
+        resources: vec![ResourceDefinition {
+            name: "table".to_string(),
+            description: Some("DynamoDB table resource".to_string()),
+            fields: vec![
+                FieldDefinition {
+                    name: "table_name".to_string(),
+                    field_type: FieldType::String,
+                    required: true,
+                    sensitive: false,
+                    immutable: true,
+                    description: Some("The name of the table".to_string()),
+                    response_accessor: None,
+                },
+            ],
+            outputs: vec![],  // Simplified - no outputs for basic compilation test
+            blocks: vec![],
+            id_field: None,
+            operations: Operations {
+                create: Some(OperationMapping {
+                    sdk_operation: "create_table".to_string(),
+                    additional_operations: vec![],
+                }),
+                read: Some(OperationMapping {
+                    sdk_operation: "describe_table".to_string(),
+                    additional_operations: vec![],
+                }),
+                update: None, // Simplified - update_table is complex
+                delete: Some(OperationMapping {
+                    sdk_operation: "delete_table".to_string(),
+                    additional_operations: vec![],
+                }),
+                import: None,
+            },
+        }],
+    };
+
+    let provider_def = ProviderDefinition {
+        provider: Provider::Aws,
+        provider_name: "aws".to_string(),
+        sdk_version: "1.0.0".to_string(),
+        services: vec![s3_service, dynamodb_service],
+    };
+
+    // Generate to temp directory
+    let temp_dir = TempDir::new().unwrap();
+    let output_path = temp_dir.path();
+
+    println!("Generating unified provider to: {}", output_path.display());
+
+    let generator = UnifiedProviderGenerator::new(provider_def).unwrap();
+    generator
+        .generate_to_directory(output_path)
+        .expect("Failed to generate unified provider");
+
+    println!("Running cargo check on generated unified provider...");
+
+    // Run cargo check on the generated code
+    let output = Command::new("cargo")
+        .args(["check", "--manifest-path"])
+        .arg(output_path.join("Cargo.toml"))
+        .output()
+        .expect("Failed to execute cargo check");
+
+    // Print output for debugging
+    if !output.status.success() {
+        eprintln!("=== CARGO CHECK STDOUT ===");
+        eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+        eprintln!("=== CARGO CHECK STDERR ===");
+        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+    }
+
+    assert!(
+        output.status.success(),
+        "Generated unified provider failed to compile. Check stderr above for details."
+    );
+
+    println!("✅ Generated unified provider compiles successfully!");
+}
