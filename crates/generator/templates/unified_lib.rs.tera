@@ -28,6 +28,9 @@ use tracing::{debug, error, info, warn};
 // Re-export protocol version constants for consumers
 pub use hemmer_provider_sdk::{PROTOCOL_VERSION as SDK_PROTOCOL_VERSION, MIN_PROTOCOL_VERSION as SDK_MIN_PROTOCOL_VERSION};
 
+// Type alias for convenience
+pub type Result<T> = std::result::Result<T, ProviderError>;
+
 /// Unified provider for {{ provider_name | capitalize }}
 pub struct {{ provider_name | capitalize }}Provider {
 {% if provider | has_config_crate %}
@@ -57,7 +60,7 @@ impl {{ provider_name | capitalize }}Provider {
 {% if provider | has_config_crate %}
 {% for service in services %}
     /// Get the {{ service.name }} client, returning an error if not configured
-    pub async fn get_{{ service.name }}_client(&self) -> Result<{{ provider | client_type(service_name=service.name) }}, ProviderError> {
+    pub async fn get_{{ service.name }}_client(&self) -> Result<{{ provider | client_type(service_name=service.name) }}> {
         let guard = self.{{ service.name }}_client.read().await;
         guard.clone().ok_or_else(|| ProviderError::InvalidRequest("Provider not configured. Call configure() first.".to_string()))
     }
@@ -81,6 +84,7 @@ impl {{ provider_name | capitalize }}Provider {
 {% endfor %}
                     ],
                     block_types: vec![],
+                    description: Some("Provider configuration".to_string()),
                 },
             },
             resources: Self::build_resource_schemas(),
@@ -139,12 +143,14 @@ impl {{ provider_name | capitalize }}Provider {
 {% for nested_block in block.blocks %}
 {% endfor %}
                                 ],
+                                description: {% if block.description %}Some("{{ block.description }}".to_string()){% else %}None{% endif %},
                             },
                             min_items: {{ block.min_items }},
                             max_items: {{ block.max_items }},
                         },
 {% endfor %}
                     ],
+                    description: {% if resource.description %}Some("{{ resource.description }}".to_string()){% else %}None{% endif %},
                 },
             },
         );
@@ -185,6 +191,7 @@ impl {{ provider_name | capitalize }}Provider {
 {% endfor %}
                     ],
                     block_types: vec![],
+                    description: {% if ds.description %}Some("{{ ds.description }}".to_string()){% else %}None{% endif %},
                 },
             },
         );
@@ -201,12 +208,51 @@ impl Default for {{ provider_name | capitalize }}Provider {
     }
 }
 
+// Helper methods for {{ provider_name | capitalize }}Provider
+impl {{ provider_name | capitalize }}Provider {
+    /// Check if any immutable fields have changed between prior and proposed states
+    fn has_immutable_field_changes(
+        &self,
+        resource_type: &str,
+        prior: &serde_json::Value,
+        proposed: &serde_json::Value,
+    ) -> bool {
+        // Get immutable fields for this resource type
+        let immutable_fields: &[&str] = match resource_type {
+{% for service in services %}
+{% for resource in service.resources %}
+            "{{ service.name }}_{{ resource.name }}" => &[
+{% for field in resource.fields %}
+{% if field.immutable %}
+                "{{ field.name }}",
+{% endif %}
+{% endfor %}
+            ],
+{% endfor %}
+{% endfor %}
+            _ => &[],
+        };
+
+        // Check each immutable field for changes
+        for field in immutable_fields {
+            let prior_val = prior.get(*field);
+            let proposed_val = proposed.get(*field);
+
+            if prior_val != proposed_val {
+                return true;
+            }
+        }
+
+        false
+    }
+}
+
 impl ProviderService for {{ provider_name | capitalize }}Provider {
     fn schema(&self) -> ProviderSchema {
         Self::build_schema()
     }
 
-    async fn configure(&self, config: serde_json::Value) -> Result<Vec<Diagnostic>, ProviderError> {
+    async fn configure(&self, config: serde_json::Value) -> std::result::Result<Vec<Diagnostic>, ProviderError> {
         info!("Configuring {{ provider_name }} provider");
         debug!("Config: {:?}", config);
 
@@ -245,7 +291,7 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         prior_state: Option<serde_json::Value>,
         proposed_state: serde_json::Value,
         config: serde_json::Value,
-    ) -> Result<PlanResult, ProviderError> {
+    ) -> std::result::Result<PlanResult, ProviderError> {
         // Parse resource type: service_resource format
         let parts: Vec<&str> = resource_type.split('_').collect();
         if parts.len() < 2 {
@@ -265,47 +311,11 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         Ok(result)
     }
 
-    /// Check if any immutable fields have changed between prior and proposed states
-    fn has_immutable_field_changes(
-        &self,
-        resource_type: &str,
-        prior: &serde_json::Value,
-        proposed: &serde_json::Value,
-    ) -> bool {
-        // Get immutable fields for this resource type
-        let immutable_fields: &[&str] = match resource_type {
-{% for service in services %}
-{% for resource in service.resources %}
-            "{{ service.name }}_{{ resource.name }}" => &[
-{% for field in resource.fields %}
-{% if field.immutable %}
-                "{{ field.name }}",
-{% endif %}
-{% endfor %}
-            ],
-{% endfor %}
-{% endfor %}
-            _ => &[],
-        };
-
-        // Check each immutable field for changes
-        for field in immutable_fields {
-            let prior_val = prior.get(*field);
-            let proposed_val = proposed.get(*field);
-
-            if prior_val != proposed_val {
-                return true;
-            }
-        }
-
-        false
-    }
-
     async fn create(
         &self,
         resource_type: &str,
         planned_state: serde_json::Value,
-    ) -> Result<serde_json::Value, ProviderError> {
+    ) -> std::result::Result<serde_json::Value, ProviderError> {
         info!("Creating {} resource", resource_type);
 
         // Parse resource type: service_resource format
@@ -336,7 +346,7 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         &self,
         resource_type: &str,
         current_state: serde_json::Value,
-    ) -> Result<serde_json::Value, ProviderError> {
+    ) -> std::result::Result<serde_json::Value, ProviderError> {
         debug!("Reading {} resource", resource_type);
 
         // Parse resource type: service_resource format
@@ -368,7 +378,7 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         resource_type: &str,
         prior_state: serde_json::Value,
         planned_state: serde_json::Value,
-    ) -> Result<serde_json::Value, ProviderError> {
+    ) -> std::result::Result<serde_json::Value, ProviderError> {
         info!("Updating {} resource", resource_type);
 
         // Parse resource type: service_resource format
@@ -399,7 +409,7 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         &self,
         resource_type: &str,
         current_state: serde_json::Value,
-    ) -> Result<(), ProviderError> {
+    ) -> std::result::Result<(), ProviderError> {
         info!("Deleting {} resource", resource_type);
 
         // Parse resource type: service_resource format
@@ -430,7 +440,7 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         &self,
         resource_type: &str,
         id: &str,
-    ) -> Result<Vec<ImportedResource>, ProviderError> {
+    ) -> std::result::Result<Vec<ImportedResource>, ProviderError> {
         info!("Importing {} resource with id: {}", resource_type, id);
 
         // Parse resource type: service_resource format
@@ -467,7 +477,7 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         &self,
         data_source_type: &str,
         config: serde_json::Value,
-    ) -> Result<serde_json::Value, ProviderError> {
+    ) -> std::result::Result<serde_json::Value, ProviderError> {
         info!("Reading {} data source", data_source_type);
 
         // Parse data source type: service_datasource format

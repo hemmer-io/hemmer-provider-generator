@@ -305,18 +305,16 @@ fn test_generated_provider_compiles() {
         resources: vec![ResourceDefinition {
             name: "bucket".to_string(),
             description: Some("S3 Bucket for object storage".to_string()),
-            fields: vec![
-                FieldDefinition {
-                    name: "bucket".to_string(),
-                    field_type: FieldType::String,
-                    required: true,
-                    sensitive: false,
-                    immutable: true,
-                    description: Some("Bucket name".to_string()),
-                    response_accessor: None,
-                },
-            ],
-            outputs: vec![],  // Simplified - no outputs for basic compilation test
+            fields: vec![FieldDefinition {
+                name: "bucket".to_string(),
+                field_type: FieldType::String,
+                required: true,
+                sensitive: false,
+                immutable: true,
+                description: Some("Bucket name".to_string()),
+                response_accessor: None,
+            }],
+            outputs: vec![], // Simplified - no outputs for basic compilation test
             blocks: vec![],
             id_field: None,
             operations: Operations {
