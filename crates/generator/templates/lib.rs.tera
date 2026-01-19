@@ -27,6 +27,9 @@ pub use hemmer_provider_sdk::{PROTOCOL_VERSION as SDK_PROTOCOL_VERSION, MIN_PROT
 
 use hemmer_provider_sdk::ProviderError;
 
+// Type alias for convenience
+pub type Result<T> = std::result::Result<T, ProviderError>;
+
 {% if sdk_config.error_metadata_import %}
 // Provider SDK error handling
 use {{ sdk_config.error_metadata_import }};
@@ -139,6 +142,7 @@ impl {{ service_name | capitalize }}Provider {
                     block: Block {
                         attributes: {{ resource.name }}_{{ block.name }}_attrs,
                         blocks: {{ resource.name }}_{{ block.name }}_blocks,
+                        description: {% if block.description %}Some("{{ block.description }}".to_string()){% else %}None{% endif %},
                     },
                     min_items: {{ block.min_items }},
                     max_items: {{ block.max_items }},
@@ -154,6 +158,7 @@ impl {{ service_name | capitalize }}Provider {
                 block: Block {
                     attributes: {{ resource.name }}_attrs,
                     blocks: {{ resource.name }}_blocks,
+                    description: {% if resource.description %}Some("{{ resource.description }}".to_string()){% else %}None{% endif %},
                 },
             },
         );
@@ -194,6 +199,7 @@ impl {{ service_name | capitalize }}Provider {
                 block: Block {
                     attributes: {{ ds.name }}_attrs,
                     blocks: HashMap::new(),
+                    description: {% if ds.description %}Some("{{ ds.description }}".to_string()){% else %}None{% endif %},
                 },
             },
         );
@@ -214,6 +220,7 @@ impl {{ service_name | capitalize }}Provider {
                 block: Block {
                     attributes: config_attrs,
                     blocks: HashMap::new(),
+                    description: Some("Provider configuration".to_string()),
                 },
             },
             resources,
@@ -225,6 +232,43 @@ impl {{ service_name | capitalize }}Provider {
 impl Default for {{ service_name | capitalize }}Provider {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// Helper methods for {{ service_name | capitalize }}Provider
+impl {{ service_name | capitalize }}Provider {
+    /// Check if any immutable fields have changed between prior and proposed states
+    fn has_immutable_field_changes(
+        &self,
+        resource_type: &str,
+        prior: &serde_json::Value,
+        proposed: &serde_json::Value,
+    ) -> bool {
+        // Get immutable fields for this resource type
+        let immutable_fields: &[&str] = match resource_type {
+{% for resource in resources %}
+            "{{ resource.name }}" => &[
+{% for field in resource.fields %}
+{% if field.immutable %}
+                "{{ field.name }}",
+{% endif %}
+{% endfor %}
+            ],
+{% endfor %}
+            _ => &[],
+        };
+
+        // Check each immutable field for changes
+        for field in immutable_fields {
+            let prior_val = prior.get(*field);
+            let proposed_val = proposed.get(*field);
+
+            if prior_val != proposed_val {
+                return true;
+            }
+        }
+
+        false
     }
 }
 
@@ -288,40 +332,6 @@ impl ProviderService for {{ service_name | capitalize }}Provider {
         }
 
         Ok(result)
-    }
-
-    /// Check if any immutable fields have changed between prior and proposed states
-    fn has_immutable_field_changes(
-        &self,
-        resource_type: &str,
-        prior: &serde_json::Value,
-        proposed: &serde_json::Value,
-    ) -> bool {
-        // Get immutable fields for this resource type
-        let immutable_fields: &[&str] = match resource_type {
-{% for resource in resources %}
-            "{{ resource.name }}" => &[
-{% for field in resource.fields %}
-{% if field.immutable %}
-                "{{ field.name }}",
-{% endif %}
-{% endfor %}
-            ],
-{% endfor %}
-            _ => &[],
-        };
-
-        // Check each immutable field for changes
-        for field in immutable_fields {
-            let prior_val = prior.get(*field);
-            let proposed_val = proposed.get(*field);
-
-            if prior_val != proposed_val {
-                return true;
-            }
-        }
-
-        false
     }
 
     async fn create(

@@ -13,6 +13,7 @@
 {% endfor %}
 
 use hemmer_provider_sdk::{
+    async_trait,
     PlanResult, ProviderSchema, ProviderService, ProviderError, ImportedResource,
     schema::{Attribute, AttributeFlags, AttributeType, Block, BlockType, NestingMode, Schema, Diagnostic},
     // Protocol versioning - re-export for visibility
@@ -27,6 +28,9 @@ use tracing::{debug, error, info, warn};
 
 // Re-export protocol version constants for consumers
 pub use hemmer_provider_sdk::{PROTOCOL_VERSION as SDK_PROTOCOL_VERSION, MIN_PROTOCOL_VERSION as SDK_MIN_PROTOCOL_VERSION};
+
+// Type alias for convenience
+pub type Result<T> = std::result::Result<T, ProviderError>;
 
 /// Unified provider for {{ provider_name | capitalize }}
 pub struct {{ provider_name | capitalize }}Provider {
@@ -57,7 +61,7 @@ impl {{ provider_name | capitalize }}Provider {
 {% if provider | has_config_crate %}
 {% for service in services %}
     /// Get the {{ service.name }} client, returning an error if not configured
-    pub async fn get_{{ service.name }}_client(&self) -> Result<{{ provider | client_type(service_name=service.name) }}, ProviderError> {
+    pub async fn get_{{ service.name }}_client(&self) -> Result<{{ provider | client_type(service_name=service.name) }}> {
         let guard = self.{{ service.name }}_client.read().await;
         guard.clone().ok_or_else(|| ProviderError::InvalidRequest("Provider not configured. Call configure() first.".to_string()))
     }
@@ -66,21 +70,29 @@ impl {{ provider_name | capitalize }}Provider {
 
     /// Build the provider schema
     fn build_schema() -> ProviderSchema {
+        // Provider config attributes
+        let mut config_attrs = HashMap::new();
+{% for attr in config_attrs %}
+        config_attrs.insert(
+            "{{ attr.name }}".to_string(),
+            Attribute::new(
+                AttributeType::String,
+{% if attr.required %}
+                AttributeFlags::required(),
+{% else %}
+                AttributeFlags::optional(),
+{% endif %}
+            ).with_description("{{ attr.description }}"),
+        );
+{% endfor %}
+
         ProviderSchema {
             provider: Schema {
                 version: 1,
                 block: Block {
-                    attributes: vec![
-{% for attr in config_attrs %}
-                        Attribute {
-                            name: "{{ attr.name }}".to_string(),
-                            attr_type: AttributeType::String,
-                            flags: {% if attr.required %}AttributeFlags::REQUIRED{% else %}AttributeFlags::OPTIONAL{% endif %},
-                            description: Some("{{ attr.description }}".to_string()),
-                        },
-{% endfor %}
-                    ],
-                    block_types: vec![],
+                    attributes: config_attrs,
+                    blocks: HashMap::new(),
+                    description: Some("Provider configuration".to_string()),
                 },
             },
             resources: Self::build_resource_schemas(),
@@ -94,57 +106,80 @@ impl {{ provider_name | capitalize }}Provider {
 {% for service in services %}
 {% for resource in service.resources %}
 
-        // {{ service.name }}.{{ resource.name }}
+        // {{ service.name }}.{{ resource.name }} resource schema
+        let mut {{ service.name }}_{{ resource.name }}_attrs = HashMap::new();
+{% for field in resource.fields %}
+        {{ service.name }}_{{ resource.name }}_attrs.insert(
+            "{{ field.name }}".to_string(),
+            Attribute::new(
+                {{ field.field_type | sdk_attr_type }},
+{% if field.required %}
+                AttributeFlags::required(),
+{% else %}
+                AttributeFlags::optional(),
+{% endif %}
+            ){% if field.sensitive %}.sensitive(){% endif %}{% if field.description %}.with_description("{{ field.description }}"){% endif %}{% if field.immutable %}.with_force_new(){% endif %},
+        );
+{% endfor %}
+{% for output in resource.outputs %}
+        {{ service.name }}_{{ resource.name }}_attrs.insert(
+            "{{ output.name }}".to_string(),
+            Attribute::new(
+                {{ output.field_type | sdk_attr_type }},
+                AttributeFlags::computed(),
+            ){% if output.description %}.with_description("{{ output.description }}"){% endif %},
+        );
+{% endfor %}
+
+        // {{ service.name }}.{{ resource.name }} nested blocks
+        let mut {{ service.name }}_{{ resource.name }}_blocks = HashMap::new();
+{% for block in resource.blocks %}
+        // {{ block.name }} block
+        {
+            let mut {{ service.name }}_{{ resource.name }}_{{ block.name }}_attrs = HashMap::new();
+{% for attr in block.attributes %}
+            {{ service.name }}_{{ resource.name }}_{{ block.name }}_attrs.insert(
+                "{{ attr.name }}".to_string(),
+                Attribute::new(
+                    {{ attr.field_type | sdk_attr_type }},
+{% if attr.required %}
+                    AttributeFlags::required(),
+{% else %}
+                    AttributeFlags::optional(),
+{% endif %}
+                ){% if attr.sensitive %}.sensitive(){% endif %}{% if attr.description %}.with_description("{{ attr.description }}"){% endif %},
+            );
+{% endfor %}
+
+            let mut {{ service.name }}_{{ resource.name }}_{{ block.name }}_blocks = HashMap::new();
+            // TODO: Support recursive nested blocks (currently limited to 1 level)
+{% for nested_block in block.blocks %}
+{% endfor %}
+
+            {{ service.name }}_{{ resource.name }}_blocks.insert(
+                "{{ block.name }}".to_string(),
+                BlockType {
+                    nesting_mode: {{ block.nesting_mode | nesting_mode }},
+                    block: Block {
+                        attributes: {{ service.name }}_{{ resource.name }}_{{ block.name }}_attrs,
+                        blocks: {{ service.name }}_{{ resource.name }}_{{ block.name }}_blocks,
+                        description: {% if block.description %}Some("{{ block.description }}".to_string()){% else %}None{% endif %},
+                    },
+                    min_items: {{ block.min_items }},
+                    max_items: {{ block.max_items }},
+                },
+            );
+        }
+{% endfor %}
+
         resources.insert(
             "{{ service.name }}_{{ resource.name }}".to_string(),
             Schema {
                 version: 1,
                 block: Block {
-                    attributes: vec![
-{% for field in resource.fields %}
-                        Attribute {
-                            name: "{{ field.name }}".to_string(),
-                            attr_type: {{ field.field_type | sdk_attr_type }},
-                            flags: {% if field.required %}AttributeFlags::REQUIRED{% else %}AttributeFlags::OPTIONAL{% endif %}{% if field.sensitive %} | AttributeFlags::SENSITIVE{% endif %}{% if field.immutable %} | AttributeFlags::FORCE_NEW{% endif %},
-                            description: {% if field.description %}Some("{{ field.description }}".to_string()){% else %}None{% endif %},
-                        },
-{% endfor %}
-{% for output in resource.outputs %}
-                        Attribute {
-                            name: "{{ output.name }}".to_string(),
-                            attr_type: {{ output.field_type | sdk_attr_type }},
-                            flags: AttributeFlags::COMPUTED,
-                            description: {% if output.description %}Some("{{ output.description }}".to_string()){% else %}None{% endif %},
-                        },
-{% endfor %}
-                    ],
-                    block_types: vec![
-{% for block in resource.blocks %}
-                        // {{ block.name }} block
-                        BlockType {
-                            nesting_mode: {{ block.nesting_mode | nesting_mode }},
-                            block: Block {
-                                attributes: vec![
-{% for attr in block.attributes %}
-                                    Attribute {
-                                        name: "{{ attr.name }}".to_string(),
-                                        attr_type: {{ attr.field_type | sdk_attr_type }},
-                                        flags: {% if attr.required %}AttributeFlags::REQUIRED{% else %}AttributeFlags::OPTIONAL{% endif %}{% if attr.sensitive %} | AttributeFlags::SENSITIVE{% endif %},
-                                        description: {% if attr.description %}Some("{{ attr.description }}".to_string()){% else %}None{% endif %},
-                                    },
-{% endfor %}
-                                ],
-                                block_types: vec![
-                                    // TODO: Support recursive nested blocks (currently limited to 1 level)
-{% for nested_block in block.blocks %}
-{% endfor %}
-                                ],
-                            },
-                            min_items: {{ block.min_items }},
-                            max_items: {{ block.max_items }},
-                        },
-{% endfor %}
-                    ],
+                    attributes: {{ service.name }}_{{ resource.name }}_attrs,
+                    blocks: {{ service.name }}_{{ resource.name }}_blocks,
+                    description: {% if resource.description %}Some("{{ resource.description }}".to_string()){% else %}None{% endif %},
                 },
             },
         );
@@ -160,31 +195,39 @@ impl {{ provider_name | capitalize }}Provider {
 {% for service in services %}
 {% for ds in service.data_sources %}
 
-        // {{ service.name }}.{{ ds.name }}
+        // {{ service.name }}.{{ ds.name }} data source schema
+        let mut {{ service.name }}_{{ ds.name }}_attrs = HashMap::new();
+{% for arg in ds.arguments %}
+        {{ service.name }}_{{ ds.name }}_attrs.insert(
+            "{{ arg.name }}".to_string(),
+            Attribute::new(
+                {{ arg.field_type | sdk_attr_type }},
+{% if arg.required %}
+                AttributeFlags::required(),
+{% else %}
+                AttributeFlags::optional(),
+{% endif %}
+            ){% if arg.description %}.with_description("{{ arg.description }}"){% endif %},
+        );
+{% endfor %}
+{% for attr in ds.attributes %}
+        {{ service.name }}_{{ ds.name }}_attrs.insert(
+            "{{ attr.name }}".to_string(),
+            Attribute::new(
+                {{ attr.field_type | sdk_attr_type }},
+                AttributeFlags::computed(),
+            ){% if attr.description %}.with_description("{{ attr.description }}"){% endif %},
+        );
+{% endfor %}
+
         data_sources.insert(
             "{{ service.name }}_{{ ds.name }}".to_string(),
             Schema {
                 version: 1,
                 block: Block {
-                    attributes: vec![
-{% for arg in ds.arguments %}
-                        Attribute {
-                            name: "{{ arg.name }}".to_string(),
-                            attr_type: {{ arg.field_type | sdk_attr_type }},
-                            flags: {% if arg.required %}AttributeFlags::REQUIRED{% else %}AttributeFlags::OPTIONAL{% endif %},
-                            description: {% if arg.description %}Some("{{ arg.description }}".to_string()){% else %}None{% endif %},
-                        },
-{% endfor %}
-{% for attr in ds.attributes %}
-                        Attribute {
-                            name: "{{ attr.name }}".to_string(),
-                            attr_type: {{ attr.field_type | sdk_attr_type }},
-                            flags: AttributeFlags::COMPUTED,
-                            description: {% if attr.description %}Some("{{ attr.description }}".to_string()){% else %}None{% endif %},
-                        },
-{% endfor %}
-                    ],
-                    block_types: vec![],
+                    attributes: {{ service.name }}_{{ ds.name }}_attrs,
+                    blocks: HashMap::new(),
+                    description: {% if ds.description %}Some("{{ ds.description }}".to_string()){% else %}None{% endif %},
                 },
             },
         );
@@ -201,12 +244,52 @@ impl Default for {{ provider_name | capitalize }}Provider {
     }
 }
 
+// Helper methods for {{ provider_name | capitalize }}Provider
+impl {{ provider_name | capitalize }}Provider {
+    /// Check if any immutable fields have changed between prior and proposed states
+    fn has_immutable_field_changes(
+        &self,
+        resource_type: &str,
+        prior: &serde_json::Value,
+        proposed: &serde_json::Value,
+    ) -> bool {
+        // Get immutable fields for this resource type
+        let immutable_fields: &[&str] = match resource_type {
+{% for service in services %}
+{% for resource in service.resources %}
+            "{{ service.name }}_{{ resource.name }}" => &[
+{% for field in resource.fields %}
+{% if field.immutable %}
+                "{{ field.name }}",
+{% endif %}
+{% endfor %}
+            ],
+{% endfor %}
+{% endfor %}
+            _ => &[],
+        };
+
+        // Check each immutable field for changes
+        for field in immutable_fields {
+            let prior_val = prior.get(*field);
+            let proposed_val = proposed.get(*field);
+
+            if prior_val != proposed_val {
+                return true;
+            }
+        }
+
+        false
+    }
+}
+
+#[async_trait]
 impl ProviderService for {{ provider_name | capitalize }}Provider {
     fn schema(&self) -> ProviderSchema {
         Self::build_schema()
     }
 
-    async fn configure(&self, config: serde_json::Value) -> Result<Vec<Diagnostic>, ProviderError> {
+    async fn configure(&self, config: serde_json::Value) -> std::result::Result<Vec<Diagnostic>, ProviderError> {
         info!("Configuring {{ provider_name }} provider");
         debug!("Config: {:?}", config);
 
@@ -245,7 +328,7 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         prior_state: Option<serde_json::Value>,
         proposed_state: serde_json::Value,
         config: serde_json::Value,
-    ) -> Result<PlanResult, ProviderError> {
+    ) -> std::result::Result<PlanResult, ProviderError> {
         // Parse resource type: service_resource format
         let parts: Vec<&str> = resource_type.split('_').collect();
         if parts.len() < 2 {
@@ -265,47 +348,11 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         Ok(result)
     }
 
-    /// Check if any immutable fields have changed between prior and proposed states
-    fn has_immutable_field_changes(
-        &self,
-        resource_type: &str,
-        prior: &serde_json::Value,
-        proposed: &serde_json::Value,
-    ) -> bool {
-        // Get immutable fields for this resource type
-        let immutable_fields: &[&str] = match resource_type {
-{% for service in services %}
-{% for resource in service.resources %}
-            "{{ service.name }}_{{ resource.name }}" => &[
-{% for field in resource.fields %}
-{% if field.immutable %}
-                "{{ field.name }}",
-{% endif %}
-{% endfor %}
-            ],
-{% endfor %}
-{% endfor %}
-            _ => &[],
-        };
-
-        // Check each immutable field for changes
-        for field in immutable_fields {
-            let prior_val = prior.get(*field);
-            let proposed_val = proposed.get(*field);
-
-            if prior_val != proposed_val {
-                return true;
-            }
-        }
-
-        false
-    }
-
     async fn create(
         &self,
         resource_type: &str,
         planned_state: serde_json::Value,
-    ) -> Result<serde_json::Value, ProviderError> {
+    ) -> std::result::Result<serde_json::Value, ProviderError> {
         info!("Creating {} resource", resource_type);
 
         // Parse resource type: service_resource format
@@ -336,7 +383,7 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         &self,
         resource_type: &str,
         current_state: serde_json::Value,
-    ) -> Result<serde_json::Value, ProviderError> {
+    ) -> std::result::Result<serde_json::Value, ProviderError> {
         debug!("Reading {} resource", resource_type);
 
         // Parse resource type: service_resource format
@@ -368,7 +415,7 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         resource_type: &str,
         prior_state: serde_json::Value,
         planned_state: serde_json::Value,
-    ) -> Result<serde_json::Value, ProviderError> {
+    ) -> std::result::Result<serde_json::Value, ProviderError> {
         info!("Updating {} resource", resource_type);
 
         // Parse resource type: service_resource format
@@ -399,7 +446,7 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         &self,
         resource_type: &str,
         current_state: serde_json::Value,
-    ) -> Result<(), ProviderError> {
+    ) -> std::result::Result<(), ProviderError> {
         info!("Deleting {} resource", resource_type);
 
         // Parse resource type: service_resource format
@@ -430,7 +477,7 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         &self,
         resource_type: &str,
         id: &str,
-    ) -> Result<Vec<ImportedResource>, ProviderError> {
+    ) -> std::result::Result<Vec<ImportedResource>, ProviderError> {
         info!("Importing {} resource with id: {}", resource_type, id);
 
         // Parse resource type: service_resource format
@@ -467,7 +514,7 @@ impl ProviderService for {{ provider_name | capitalize }}Provider {
         &self,
         data_source_type: &str,
         config: serde_json::Value,
-    ) -> Result<serde_json::Value, ProviderError> {
+    ) -> std::result::Result<serde_json::Value, ProviderError> {
         info!("Reading {} data source", data_source_type);
 
         // Parse data source type: service_datasource format

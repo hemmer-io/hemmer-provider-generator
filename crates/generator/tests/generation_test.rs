@@ -290,3 +290,83 @@ fn test_generate_s3_provider() {
     // See issue #91 for comprehensive integration testing
     println!("✅ Generated code structure verified (full compilation testing in #91)");
 }
+
+#[test]
+#[ignore] // Run with `cargo test -- --ignored` - takes longer due to compilation
+fn test_generated_provider_compiles() {
+    use std::process::Command;
+
+    // Create a realistic S3 service definition (simplified to ensure compilation)
+    let service_def = ServiceDefinition {
+        provider: Provider::Aws,
+        name: "s3".to_string(),
+        sdk_version: "1.0.0".to_string(),
+        data_sources: vec![],
+        resources: vec![ResourceDefinition {
+            name: "bucket".to_string(),
+            description: Some("S3 Bucket for object storage".to_string()),
+            fields: vec![FieldDefinition {
+                name: "bucket".to_string(),
+                field_type: FieldType::String,
+                required: true,
+                sensitive: false,
+                immutable: true,
+                description: Some("Bucket name".to_string()),
+                response_accessor: None,
+            }],
+            outputs: vec![], // Simplified - no outputs for basic compilation test
+            blocks: vec![],
+            id_field: None,
+            operations: Operations {
+                create: Some(OperationMapping {
+                    sdk_operation: "create_bucket".to_string(),
+                    additional_operations: vec![],
+                }),
+                read: Some(OperationMapping {
+                    sdk_operation: "head_bucket".to_string(),
+                    additional_operations: vec![],
+                }),
+                update: None, // S3 buckets don't have a simple update operation
+                delete: Some(OperationMapping {
+                    sdk_operation: "delete_bucket".to_string(),
+                    additional_operations: vec![],
+                }),
+                import: None,
+            },
+        }],
+    };
+
+    // Generate provider to temp directory
+    let temp_dir = TempDir::new().unwrap();
+    let output_path = temp_dir.path();
+
+    println!("Generating provider to: {}", output_path.display());
+    let generator = ProviderGenerator::new(service_def).unwrap();
+    generator
+        .generate_to_directory(output_path)
+        .expect("Failed to generate provider");
+
+    println!("Running cargo check on generated provider...");
+
+    // Run cargo check on the generated code
+    let output = Command::new("cargo")
+        .args(["check", "--manifest-path"])
+        .arg(output_path.join("Cargo.toml"))
+        .output()
+        .expect("Failed to execute cargo check");
+
+    // Print output for debugging
+    if !output.status.success() {
+        eprintln!("=== CARGO CHECK STDOUT ===");
+        eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+        eprintln!("=== CARGO CHECK STDERR ===");
+        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+    }
+
+    assert!(
+        output.status.success(),
+        "Generated provider failed to compile. Check stderr above for details."
+    );
+
+    println!("✅ Generated provider compiles successfully!");
+}

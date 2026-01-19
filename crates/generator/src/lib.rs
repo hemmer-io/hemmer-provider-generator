@@ -391,6 +391,7 @@ impl UnifiedProviderGenerator {
         let mut context = self.create_unified_context();
         let resource_names: Vec<&str> = service.resources.iter().map(|r| r.name.as_str()).collect();
         context.insert("resource_names", &resource_names);
+        context.insert("is_unified", &true);
 
         let rendered = self
             .tera

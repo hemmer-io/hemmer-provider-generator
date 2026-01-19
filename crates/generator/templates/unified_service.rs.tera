@@ -4,6 +4,7 @@
 
 pub mod resources;
 
+use crate::{ProviderError, Result};
 use std::collections::HashMap;
 use tracing::{debug, info};
 
@@ -13,13 +14,13 @@ pub async fn create_resource(
     resource_name: &str,
     client: {{ provider | client_type(service_name=service.name) }},
     input: serde_json::Value,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     info!("Creating {}.{}", "{{ service.name }}", resource_name);
     match resource_name {
 {% for resource in service.resources %}
         "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::create(client, input).await,
 {% endfor %}
-        _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
+        _ => Err(ProviderError::InvalidRequest(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name))),
     }
 }
 
@@ -28,13 +29,13 @@ pub async fn read_resource(
     resource_name: &str,
     client: {{ provider | client_type(service_name=service.name) }},
     current: serde_json::Value,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     debug!("Reading {}.{}", "{{ service.name }}", resource_name);
     match resource_name {
 {% for resource in service.resources %}
         "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::read(client, current).await,
 {% endfor %}
-        _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
+        _ => Err(ProviderError::InvalidRequest(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name))),
     }
 }
 
@@ -43,13 +44,13 @@ pub async fn update_resource(
     resource_name: &str,
     client: {{ provider | client_type(service_name=service.name) }},
     input: serde_json::Value,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     info!("Updating {}.{}", "{{ service.name }}", resource_name);
     match resource_name {
 {% for resource in service.resources %}
         "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::update(client, input).await,
 {% endfor %}
-        _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
+        _ => Err(ProviderError::InvalidRequest(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name))),
     }
 }
 
@@ -58,13 +59,13 @@ pub async fn delete_resource(
     resource_name: &str,
     client: {{ provider | client_type(service_name=service.name) }},
     current: serde_json::Value,
-) -> Result<(), String> {
+) -> Result<()> {
     info!("Deleting {}.{}", "{{ service.name }}", resource_name);
     match resource_name {
 {% for resource in service.resources %}
         "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::delete(client, current).await,
 {% endfor %}
-        _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
+        _ => Err(ProviderError::InvalidRequest(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name))),
     }
 }
 
@@ -73,7 +74,7 @@ pub async fn import_resource(
     resource_name: &str,
     client: {{ provider | client_type(service_name=service.name) }},
     id: &str,
-) -> Result<Vec<hemmer_provider_sdk::ImportedResource>, hemmer_provider_sdk::ProviderError> {
+) -> Result<Vec<hemmer_provider_sdk::ImportedResource>> {
     info!("Importing {}.{} with id: {}", "{{ service.name }}", resource_name, id);
     match resource_name {
 {% for resource in service.resources %}
@@ -92,7 +93,7 @@ pub async fn read_data_source(
     data_source_type: &str,
     client: {{ provider | client_type(service_name=service.name) }},
     config: serde_json::Value,
-) -> Result<serde_json::Value, hemmer_provider_sdk::ProviderError> {
+) -> Result<serde_json::Value> {
     info!("Reading {}.{} data source", "{{ service.name }}", data_source_type);
     match data_source_type {
 {% for ds in service.data_sources %}
@@ -111,13 +112,13 @@ pub async fn create_resource(
     resource_name: &str,
     config: &HashMap<String, String>,
     input: serde_json::Value,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     info!("Creating {}.{}", "{{ service.name }}", resource_name);
     match resource_name {
 {% for resource in service.resources %}
         "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::create(config, input).await,
 {% endfor %}
-        _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
+        _ => Err(ProviderError::InvalidRequest(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name))),
     }
 }
 
@@ -126,13 +127,13 @@ pub async fn read_resource(
     resource_name: &str,
     config: &HashMap<String, String>,
     current: serde_json::Value,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     debug!("Reading {}.{}", "{{ service.name }}", resource_name);
     match resource_name {
 {% for resource in service.resources %}
         "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::read(config, current).await,
 {% endfor %}
-        _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
+        _ => Err(ProviderError::InvalidRequest(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name))),
     }
 }
 
@@ -141,13 +142,13 @@ pub async fn update_resource(
     resource_name: &str,
     config: &HashMap<String, String>,
     input: serde_json::Value,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     info!("Updating {}.{}", "{{ service.name }}", resource_name);
     match resource_name {
 {% for resource in service.resources %}
         "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::update(config, input).await,
 {% endfor %}
-        _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
+        _ => Err(ProviderError::InvalidRequest(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name))),
     }
 }
 
@@ -156,13 +157,13 @@ pub async fn delete_resource(
     resource_name: &str,
     config: &HashMap<String, String>,
     current: serde_json::Value,
-) -> Result<(), String> {
+) -> Result<()> {
     info!("Deleting {}.{}", "{{ service.name }}", resource_name);
     match resource_name {
 {% for resource in service.resources %}
         "{{ resource.name }}" => resources::{{ resource.name | sanitize_identifier_part }}::delete(config, current).await,
 {% endfor %}
-        _ => Err(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name)),
+        _ => Err(ProviderError::InvalidRequest(format!("Unknown resource: {}.{}", "{{ service.name }}", resource_name))),
     }
 }
 
@@ -171,7 +172,7 @@ pub async fn import_resource(
     resource_name: &str,
     config: &HashMap<String, String>,
     id: &str,
-) -> Result<Vec<hemmer_provider_sdk::ImportedResource>, hemmer_provider_sdk::ProviderError> {
+) -> Result<Vec<hemmer_provider_sdk::ImportedResource>> {
     info!("Importing {}.{} with id: {}", "{{ service.name }}", resource_name, id);
     match resource_name {
 {% for resource in service.resources %}
@@ -190,7 +191,7 @@ pub async fn read_data_source(
     data_source_type: &str,
     config: &HashMap<String, String>,
     config_value: serde_json::Value,
-) -> Result<serde_json::Value, hemmer_provider_sdk::ProviderError> {
+) -> Result<serde_json::Value> {
     info!("Reading {}.{} data source", "{{ service.name }}", data_source_type);
     match data_source_type {
 {% for ds in service.data_sources %}

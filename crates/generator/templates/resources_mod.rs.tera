@@ -1,5 +1,5 @@
 //! Resource modules
 
 {% for name in resource_names %}pub mod {{ name }};
-pub use {{ name }}::{{ name | capitalize }};
-{% endfor %}
+{% if is_unified %}// Unified providers use module functions directly{% else %}pub use {{ name }}::{{ name | capitalize }};
+{% endif %}{% endfor %}

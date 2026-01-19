@@ -2,6 +2,7 @@
 //!
 //! {{ resource.description | default(value="Auto-generated resource") }}
 
+use crate::{ProviderError, Result};
 use tracing::{debug, error, info, warn};
 
 {% if provider | has_config_crate %}
@@ -9,7 +10,7 @@ use tracing::{debug, error, info, warn};
 pub async fn create(
     client: {{ provider | client_type(service_name=service_name) }},
     input: serde_json::Value,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     info!("Creating {{ resource.name }}");
     debug!("Input: {:?}", input);
 
@@ -17,7 +18,7 @@ pub async fn create(
 {% for field in resource.fields %}
 {% if field.required %}
     if input.get("{{ field.name }}").is_none() {
-        return Err("Missing required field: {{ field.name }}".to_string());
+        return Err(ProviderError::Validation("Missing required field: {{ field.name }}".to_string()));
     }
 {% endif %}
 {% endfor %}
@@ -409,7 +410,7 @@ pub async fn create(
         }
         Err(e) => {
             error!("Failed to create {{ resource.name }}: {:?}", e);
-            Err(format!("Failed to create {{ resource.name }}: {}", e))
+            Err(ProviderError::SdkError(format!("Failed to create {{ resource.name }}: {}", e)))
         }
     }
 {% else %}
@@ -423,7 +424,7 @@ pub async fn create(
 pub async fn read(
     client: {{ provider | client_type(service_name=service_name) }},
     current: serde_json::Value,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     debug!("Reading {{ resource.name }}");
 
 {% if resource.operations.read %}
@@ -728,7 +729,7 @@ pub async fn read(
 pub async fn update(
     client: {{ provider | client_type(service_name=service_name) }},
     input: serde_json::Value,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     info!("Updating {{ resource.name }}");
     debug!("Input: {:?}", input);
 
@@ -1030,7 +1031,7 @@ pub async fn update(
         }
         Err(e) => {
             error!("Failed to update {{ resource.name }}: {:?}", e);
-            Err(format!("Failed to update {{ resource.name }}: {}", e))
+            Err(ProviderError::SdkError(format!("Failed to update {{ resource.name }}: {}", e)))
         }
     }
 {% else %}
@@ -1044,7 +1045,7 @@ pub async fn update(
 pub async fn delete(
     client: {{ provider | client_type(service_name=service_name) }},
     current: serde_json::Value,
-) -> Result<(), String> {
+) -> Result<()> {
     info!("Deleting {{ resource.name }}");
     debug!("Current state: {:?}", current);
 
@@ -1070,7 +1071,7 @@ pub async fn delete(
         }
         Err(e) => {
             error!("Failed to delete {{ resource.name }}: {:?}", e);
-            Err(format!("Failed to delete {{ resource.name }}: {}", e))
+            Err(ProviderError::SdkError(format!("Failed to delete {{ resource.name }}: {}", e)))
         }
     }
 {% else %}
@@ -1084,7 +1085,7 @@ pub async fn delete(
 pub async fn import(
     client: {{ provider | client_type(service_name=service_name) }},
     id: &str,
-) -> Result<Vec<hemmer_provider_sdk::ImportedResource>, hemmer_provider_sdk::ProviderError> {
+) -> Result<Vec<hemmer_provider_sdk::ImportedResource>> {
     info!("Importing {{ resource.name }} with id: {}", id);
 
 {% if resource.operations.import or resource.operations.read %}
@@ -1191,7 +1192,7 @@ use std::collections::HashMap;
 pub async fn create(
     config: &HashMap<String, String>,
     input: serde_json::Value,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     info!("Creating {{ resource.name }}");
     debug!("Input: {:?}", input);
 
@@ -1199,7 +1200,7 @@ pub async fn create(
 {% for field in resource.fields %}
 {% if field.required %}
     if input.get("{{ field.name }}").is_none() {
-        return Err("Missing required field: {{ field.name }}".to_string());
+        return Err(ProviderError::Validation("Missing required field: {{ field.name }}".to_string()));
     }
 {% endif %}
 {% endfor %}
@@ -1222,7 +1223,7 @@ pub async fn create(
 pub async fn read(
     config: &HashMap<String, String>,
     current: serde_json::Value,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     debug!("Reading {{ resource.name }}");
     // TODO: Implement {{ provider }} SDK calls
     Ok(current)
@@ -1232,7 +1233,7 @@ pub async fn read(
 pub async fn update(
     config: &HashMap<String, String>,
     input: serde_json::Value,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     info!("Updating {{ resource.name }}");
     // TODO: Implement {{ provider }} SDK calls
     Ok(input)
@@ -1242,7 +1243,7 @@ pub async fn update(
 pub async fn delete(
     config: &HashMap<String, String>,
     current: serde_json::Value,
-) -> Result<(), String> {
+) -> Result<()> {
     info!("Deleting {{ resource.name }}");
     // TODO: Implement {{ provider }} SDK calls
     Ok(())
@@ -1252,7 +1253,7 @@ pub async fn delete(
 pub async fn import(
     config: &HashMap<String, String>,
     id: &str,
-) -> Result<Vec<hemmer_provider_sdk::ImportedResource>, hemmer_provider_sdk::ProviderError> {
+) -> Result<Vec<hemmer_provider_sdk::ImportedResource>> {
     info!("Importing {{ resource.name }} with id: {}", id);
     // TODO: Implement {{ provider }} SDK calls for import
     Err(hemmer_provider_sdk::ProviderError::Unimplemented(format!(
