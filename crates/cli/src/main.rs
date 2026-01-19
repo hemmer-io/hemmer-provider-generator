@@ -172,8 +172,19 @@ enum Commands {
         --service-filter 'bigquery,storage,pubsub'")]
     AnalyzeSdk {
         /// Path to SDK repository (local directory)
-        #[arg(short, long)]
-        sdk_path: PathBuf,
+        /// Mutually exclusive with --clone
+        #[arg(short, long, conflicts_with = "clone")]
+        sdk_path: Option<PathBuf>,
+
+        /// Clone git repository URL
+        /// Mutually exclusive with --sdk-path
+        #[arg(short, long, conflicts_with = "sdk_path")]
+        clone: Option<String>,
+
+        /// Branch, tag, or commit to checkout when cloning
+        /// Requires --clone
+        #[arg(short, long, requires = "clone")]
+        branch: Option<String>,
 
         /// Provider name (e.g., "aws", "custom-cloud")
         #[arg(short, long)]
@@ -281,13 +292,17 @@ fn main() -> Result<()> {
 
         Commands::AnalyzeSdk {
             sdk_path,
+            clone,
+            branch,
             name,
             output,
             min_confidence,
             service_filter,
         } => {
             analyze_sdk_command(
-                sdk_path.as_path(),
+                sdk_path.as_deref(),
+                clone.as_deref(),
+                branch.as_deref(),
                 &name,
                 output.as_deref(),
                 min_confidence,
@@ -962,25 +977,56 @@ fn discover_specs(
 }
 
 /// Analyze SDK repository and generate metadata YAML
+#[allow(clippy::too_many_arguments)]
 fn analyze_sdk_command(
-    sdk_path: &Path,
+    sdk_path: Option<&Path>,
+    clone_url: Option<&str>,
+    branch: Option<&str>,
     name: &str,
     output: Option<&Path>,
     min_confidence: f32,
     service_filter: Option<&str>,
     verbose: bool,
 ) -> Result<()> {
-    println!("{} Analyzing SDK at: {}", "→".cyan(), sdk_path.display());
+    use hemmer_provider_generator_analyzer::ClonedRepo;
+
+    // Validate that either sdk_path or clone_url is provided
+    if sdk_path.is_none() && clone_url.is_none() {
+        anyhow::bail!("Either --sdk-path or --clone must be provided");
+    }
+
+    // Handle git cloning if requested
+    let _cloned_repo: Option<ClonedRepo>;
+    let analysis_path = if let Some(url) = clone_url {
+        println!("{} Cloning repository: {}", "→".cyan(), url);
+        if let Some(branch_name) = branch {
+            println!("{} Branch/tag: {}", "→".cyan(), branch_name);
+        }
+
+        _cloned_repo = Some(ClonedRepo::clone(url, branch).context("Failed to clone repository")?);
+
+        _cloned_repo.as_ref().unwrap().path()
+    } else {
+        let path = sdk_path.unwrap();
+
+        // Validate SDK path exists
+        if !path.exists() {
+            anyhow::bail!("SDK path does not exist: {}", path.display());
+        }
+
+        if !path.is_dir() {
+            anyhow::bail!("SDK path must be a directory: {}", path.display());
+        }
+
+        path
+    };
+
+    println!(
+        "{} Analyzing SDK at: {}",
+        "→".cyan(),
+        analysis_path.display()
+    );
     println!("{} Provider name: {}", "→".cyan(), name);
-
-    // Validate SDK path exists
-    if !sdk_path.exists() {
-        anyhow::bail!("SDK path does not exist: {}", sdk_path.display());
-    }
-
-    if !sdk_path.is_dir() {
-        anyhow::bail!("SDK path must be a directory: {}", sdk_path.display());
-    }
 
     // Parse service filter if provided
     let service_filter_list = service_filter.map(|filter| {
@@ -995,7 +1041,8 @@ fn analyze_sdk_command(
     }
 
     // Create analyzer
-    let mut analyzer = SdkAnalyzer::new(sdk_path.to_path_buf(), name.to_string()).verbose(verbose);
+    let mut analyzer =
+        SdkAnalyzer::new(analysis_path.to_path_buf(), name.to_string()).verbose(verbose);
 
     if let Some(filters) = service_filter_list {
         analyzer = analyzer.with_service_filter(filters);

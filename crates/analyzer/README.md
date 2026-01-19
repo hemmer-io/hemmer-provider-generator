@@ -50,6 +50,17 @@ hemmer-provider-generator analyze-sdk \
   --sdk-path ~/code/aws-sdk-rust \
   --name aws
 
+# Clone and analyze remote repository
+hemmer-provider-generator analyze-sdk \
+  --clone https://github.com/awslabs/aws-sdk-rust \
+  --name aws
+
+# Clone specific branch or tag
+hemmer-provider-generator analyze-sdk \
+  --clone https://github.com/custom/sdk \
+  --branch v1.0.0 \
+  --name custom-cloud
+
 # Custom output location
 hemmer-provider-generator analyze-sdk \
   --sdk-path ./custom-sdk \
@@ -86,6 +97,7 @@ crates/analyzer/
 ├── src/
 │   ├── lib.rs                    # Public API
 │   ├── analyzer.rs               # Core orchestration
+│   ├── git_cloner.rs             # Git repository cloning
 │   ├── workspace_detector.rs     # Cargo workspace analysis
 │   ├── crate_pattern_detector.rs # Crate naming patterns
 │   ├── client_detector.rs        # Client type detection (syn)
